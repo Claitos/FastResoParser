@@ -1,0 +1,1 @@
+This is a parser to manipulate the date inside the Azhydro data files for the FastReso package. It saves the data inside two pandas dataframes for manipulation and allows to save them again to a file which has the exact same structure as the original data file.
