@@ -16,7 +16,7 @@ def parse_to_df(file_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     decays = []
 
     with open(file_path, "r", encoding="utf-8", errors="ignore") as file:
-        current_particle = None
+        # current_particle = None
         for line in file:
             parts = line.strip().split("\t")
             if len(parts) == 12:
@@ -36,7 +36,7 @@ def parse_to_df(file_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
                     "No. of decay channels": int(parts[11])
                 }
                 particles.append(particle)
-                current_particle = particle["ID"]
+                # current_particle = particle["ID"]
             elif len(parts) == 8:
                 # This is a decay channel line
                 decay = {
