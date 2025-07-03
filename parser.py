@@ -162,16 +162,18 @@ def decay_to_pion_chain_helper(particle_id: int) -> bool:
         decays_of_particle = decays_df[decays_df["ParentID"] == particle_id]
         for _, decay in decays_of_particle.iterrows():
             for product_id in decay["ProductIDs"]:
-                if decay_to_pion_helper(product_id):
+                if product_id in stable_particles:
+                    continue
+                if decay_to_pion_chain_helper(product_id):
                     default = True
                     break
             if default:
                 break
 
 
-
-
     return default
+
+
 
 
 
@@ -184,34 +186,40 @@ file_path = "decays_PDG2016Plus_massorder_original.dat"
 # Parse the file
 particles_df, decays_df = parse_to_df(file_path)
 
+stable_particles = particles_df[particles_df["Width (GeV)"] == 0.0]["ID"].tolist()
+# print(f"Number of stable particles: {len(stable_particles)}")
+# print(f"Stable particles IDs: {stable_particles}")
 
-# View the data
-print("Particles DataFrame:")
-print(particles_df.head(n=10))
 
-print("\nDecays DataFrame:")
-print(decays_df.head(n=10))
+
+# # View the data
+# print("Particles DataFrame:")
+# print(particles_df.head(n=10))
+# print(len(particles_df))
+
+# print("\nDecays DataFrame:")
+# print(decays_df.head(n=10))
 
 
 # Example usage of the helper functions
-# counter = 0
-# for particle_id in particles_df["ID"]:
-#     if decay_to_pion_helper(particle_id):
-#         print(f"Particle ID {particle_id} decays into a pion.")
-#         counter += 1
-#     else:
-#         print(f"Particle ID {particle_id} does not decay into a pion.")
+counter = 0
+for particle_id in particles_df["ID"]:
+    if decay_to_pion_chain_helper(particle_id):
+        print(f"Particle ID {particle_id} decays into a pion.")
+        counter += 1
+    else:
+        print(f"Particle ID {particle_id} does not decay into a pion.")
 
-# print(f"\nTotal particles that decay into a pion: {counter}")
+print(f"\nTotal particles that decay into a pion: {counter}")
 
 
 # Example of deleting a particle
-delete_particle_helper(2001034)  
-delete_particle_helper(2001033) 
-print("Particles DataFrame:")
-print(particles_df.head(n=10))
-print("\nDecays DataFrame:")
-print(decays_df.head(n=10))
+# delete_particle_helper(2001034)  
+# delete_particle_helper(2001033) 
+# print("Particles DataFrame:")
+# print(particles_df.head(n=10))
+# print("\nDecays DataFrame:")
+# print(decays_df.head(n=10))
 
 
 # print("\n")
