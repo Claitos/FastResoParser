@@ -67,8 +67,8 @@ def parse_to_dat(output_path: str, particles_df: pd.DataFrame, decays_df: pd.Dat
             particle_line = "\t".join([
                 str(particle["ID"]),
                 particle["Name"],
-                f"{particle['Mass (GeV)']:.5f}",
-                f"{particle['Width (GeV)']:.5f}",
+                f"{particle['Mass (GeV)']:.9f}",
+                f"{particle['Width (GeV)']:.9f}",
                 str(particle["Degeneracy"]),
                 str(particle["Baryon no."]),
                 str(particle["Strangeness no."]),
@@ -86,11 +86,95 @@ def parse_to_dat(output_path: str, particles_df: pd.DataFrame, decays_df: pd.Dat
                 decay_line = "\t".join([
                     str(decay["ParentID"]),
                     str(decay["No. of daughter particles"]),
-                    f"{decay['BranchingRatio']:.5f}"
+                    f"{decay['BranchingRatio']:.9f}"
                 ] + [str(product) for product in decay["ProductIDs"]])
                 f.write(decay_line + "\n")
     
     print(f"Data successfully written to {output_path}")
+
+
+def delete_particle_helper(particle_id: int):
+    """
+    Deletes a particle and its associated decay channels from the DataFrames. 
+    This function assumes that the DataFrames are global variables.
+    Be careful with this operation as it modifies the DataFrames directly. 
+    So they are not passed as arguments (mind the exact variable name) and no copied dataframes are returned.
+    
+    :param particle_id: The ID of the particle to delete.
+    :raises NameError: If particles_df or decays_df is not defined.
+    :raises TypeError: If particles_df or decays_df is not a DataFrame.
+    :return: None
+    """
+
+    if 'particles_df' in globals():
+        if not isinstance(particles_df, pd.DataFrame):
+            raise TypeError("particles_df is not a DataFrame.")
+    else:
+        raise NameError("particles_df is not defined. Make sure to run the parser first.")
+    
+    if 'decays_df' in globals():
+        if not isinstance(decays_df, pd.DataFrame):
+            raise TypeError("decays_df is not a DataFrame.")
+    else:
+        raise NameError("decays_df is not defined. Make sure to run the parser first.")
+
+    # Remove the particle
+    particles_df.drop(particles_df[particles_df["ID"] == particle_id].index, inplace=True)
+    
+    # Remove associated decay channels
+    decays_df.drop(decays_df[decays_df["ParentID"] == particle_id].index, inplace=True)
+
+
+def decay_to_pion_helper(particle_id: int) -> bool:
+    """ 
+    Checks if a particle decays into a pion (or antipion).
+    This function assumes that the particle ID is valid and exists in the decays DataFrame.
+    It returns True if the particle decays into a pion, False otherwise.
+
+    :param particle_id: The ID of the particle to check.
+    :return: True if the particle decays into a pion, False otherwise.
+    :raises NameError: If the particle ID is not found in the decays DataFrame
+    """
+
+    pion_id = 211  # PDG ID for pion
+    decays_of_particle = decays_df[decays_df["ParentID"] == particle_id]  # Filter decays for the given particle ID
+    if decays_of_particle.empty:
+        NameError(f"Particle with ID {particle_id} not found in decays DataFrame.")
+
+
+    default = False  # Default value to return if no pion decay is found
+    for _, decay in decays_of_particle.iterrows():
+        # Check if the pion ID is in the decay products
+        if pion_id in decay["ProductIDs"] or -pion_id in decay["ProductIDs"]:
+            default = True
+
+    return default
+
+
+def decay_to_pion_chain_helper(particle_id: int) -> bool:
+
+    default = False  # Default value to return if no pion decay is found
+
+    if decay_to_pion_helper(particle_id):
+        default = True
+    else:
+        # Check if the particle decays into other particles that eventually decay into a pion
+        decays_of_particle = decays_df[decays_df["ParentID"] == particle_id]
+        for _, decay in decays_of_particle.iterrows():
+            for product_id in decay["ProductIDs"]:
+                if decay_to_pion_helper(product_id):
+                    default = True
+                    break
+            if default:
+                break
+
+
+
+
+    return default
+
+
+
 
 
 
@@ -103,23 +187,45 @@ particles_df, decays_df = parse_to_df(file_path)
 
 # View the data
 print("Particles DataFrame:")
-print(particles_df.head())
+print(particles_df.head(n=10))
 
 print("\nDecays DataFrame:")
-print(decays_df.head())
+print(decays_df.head(n=10))
+
+
+# Example usage of the helper functions
+# counter = 0
+# for particle_id in particles_df["ID"]:
+#     if decay_to_pion_helper(particle_id):
+#         print(f"Particle ID {particle_id} decays into a pion.")
+#         counter += 1
+#     else:
+#         print(f"Particle ID {particle_id} does not decay into a pion.")
+
+# print(f"\nTotal particles that decay into a pion: {counter}")
+
+
+# Example of deleting a particle
+delete_particle_helper(2001034)  
+delete_particle_helper(2001033) 
+print("Particles DataFrame:")
+print(particles_df.head(n=10))
+print("\nDecays DataFrame:")
+print(decays_df.head(n=10))
+
 
 # print("\n")
 # print(particles_df["Mass (GeV)"])
 
-plt.plot(particles_df["Mass (GeV)"], marker='o', linestyle='None')
-plt.show()
+# plt.plot(particles_df["Mass (GeV)"], marker='o', linestyle='None')
+# plt.show()
 
 
 
 # Output path
-output_path = "decays_PDG2016Plus_massorder_new.dat"
+# output_path = "decays_PDG2016Plus_massorder_new.dat"
 
-parse_to_dat(output_path, particles_df, decays_df)
+# parse_to_dat(output_path, particles_df, decays_df)
 
 
 
