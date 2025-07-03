@@ -187,8 +187,8 @@ file_path = "decays_PDG2016Plus_massorder_original.dat"
 particles_df, decays_df = parse_to_df(file_path)
 
 stable_particles = particles_df[particles_df["Width (GeV)"] == 0.0]["ID"].tolist()
-# print(f"Number of stable particles: {len(stable_particles)}")
-# print(f"Stable particles IDs: {stable_particles}")
+print(f"Number of stable particles: {len(stable_particles)}")
+print(f"Stable particles IDs: {stable_particles}")
 
 
 
@@ -205,7 +205,7 @@ stable_particles = particles_df[particles_df["Width (GeV)"] == 0.0]["ID"].tolist
 counter = 0
 for particle_id in particles_df["ID"]:
     if decay_to_pion_chain_helper(particle_id):
-        print(f"Particle ID {particle_id} decays into a pion.")
+        # print(f"Particle ID {particle_id} decays into a pion.")
         counter += 1
     else:
         print(f"Particle ID {particle_id} does not decay into a pion.")
