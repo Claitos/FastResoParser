@@ -137,6 +137,10 @@ def decay_to_pion_helper(particle_id: int) -> bool:
     """
 
     pion_id = 211  # PDG ID for pion
+
+    if particle_id == pion_id or particle_id == -pion_id:
+        return False  # A pion does not decay into itself
+
     decays_of_particle = decays_df[decays_df["ParentID"] == particle_id]  # Filter decays for the given particle ID
     if decays_of_particle.empty:
         NameError(f"Particle with ID {particle_id} not found in decays DataFrame.")
@@ -175,66 +179,176 @@ def decay_to_pion_chain_helper(particle_id: int) -> bool:
 
 
 
+def list_depth(lst):
+    if not isinstance(lst, list):
+        return 0
+    return 1 + max((list_depth(item) for item in lst), default=0)
+
+
+def get_value_paths(data, prefix=''):
+    paths = []
+    i = 0
+    while i < len(data):
+        item = data[i]
+
+        if isinstance(item, int):
+            # If followed by a list → descend
+            if i + 1 < len(data) and isinstance(data[i + 1], list):
+                new_prefix = f"{prefix}.{item}" if prefix else str(item)
+                paths.extend(get_value_paths(data[i + 1], new_prefix))
+                i += 2
+            else:
+                # Standalone int → treat as leaf
+                full_path = f"{prefix}.{item}" if prefix else str(item)
+                paths.append(full_path)
+                i += 1
+
+        elif isinstance(item, list):
+            # List not preceded by int (rare in your case), descend flat
+            paths.extend(get_value_paths(item, prefix))
+            i += 1
+
+        else:
+            i += 1
+
+    return paths
+
+
+def decay_chain_helper(particle_id: int) -> list:
+    """ 
+    Checks the branching ratios of a particle's decay chain to see if it decays into stable particles.
+    This function assumes that the particle ID is valid and exists in the decays DataFrame.
+    It returns a dictionary of stable particle IDs and their branching ratios if they are found in the decay chain.
+
+    :param particle_id: The ID of the particle to check.
+    :return: A list of stable particle IDs and their branching ratios.
+    """
+
+    decays_of_particle = decays_df[decays_df["ParentID"] == particle_id]  # Filter decays for the given particle ID
+    decay_chain = [] # Dictionary to store branching ratios of decay
+
+    for _, decay in decays_of_particle.iterrows():
+        for product_id in decay["ProductIDs"]:
+            if product_id == 0:
+                continue
+            elif product_id in stable_particles:
+                decay_chain.append(product_id)  # Add stable particle ID to the decay chain
+                continue
+            else:
+                decay_chain.append(product_id)  # Add the product ID to the decay chain
+                child_decay_chain = decay_chain_helper(product_id)
+                if child_decay_chain:
+                    decay_chain.append(child_decay_chain)
+
+    return decay_chain
+
+
+
+def branchratio_of_chain_to_pions_helper(particle_id: int) -> list:
+    return 0
 
 
 
 
 
-# Path to your file
-file_path = "decays_PDG2016Plus_massorder_original.dat"
-
-# Parse the file
-particles_df, decays_df = parse_to_df(file_path)
-
-stable_particles = particles_df[particles_df["Width (GeV)"] == 0.0]["ID"].tolist()
-print(f"Number of stable particles: {len(stable_particles)}")
-print(f"Stable particles IDs: {stable_particles}")
 
 
 
-# # View the data
-# print("Particles DataFrame:")
-# print(particles_df.head(n=10))
-# print(len(particles_df))
-
-# print("\nDecays DataFrame:")
-# print(decays_df.head(n=10))
-
-
-# Example usage of the helper functions
-counter = 0
-for particle_id in particles_df["ID"]:
-    if decay_to_pion_chain_helper(particle_id):
-        # print(f"Particle ID {particle_id} decays into a pion.")
-        counter += 1
-    else:
-        print(f"Particle ID {particle_id} does not decay into a pion.")
-
-print(f"\nTotal particles that decay into a pion: {counter}")
-
-
-# Example of deleting a particle
-# delete_particle_helper(2001034)  
-# delete_particle_helper(2001033) 
-# print("Particles DataFrame:")
-# print(particles_df.head(n=10))
-# print("\nDecays DataFrame:")
-# print(decays_df.head(n=10))
-
-
-# print("\n")
-# print(particles_df["Mass (GeV)"])
-
-# plt.plot(particles_df["Mass (GeV)"], marker='o', linestyle='None')
-# plt.show()
 
 
 
-# Output path
-# output_path = "decays_PDG2016Plus_massorder_new.dat"
+def main():
 
-# parse_to_dat(output_path, particles_df, decays_df)
 
+    # Path to your file
+    file_path = "decays_PDG2016Plus_massorder_original.dat"
+    # file_path = "decays_QM2016Plus_massorder.dat"
+
+    # Parse the file
+    global particles_df, decays_df  # Declare as global to modify in helper functions
+    particles_df, decays_df = parse_to_df(file_path)
+
+    global stable_particles  # Declare as global to use in helper functions
+    stable_particles_test = particles_df[particles_df["Width (GeV)"] == 0.0]
+    stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
+    print(f"Number of stable particles: {len(stable_particles)}")
+    print(f"Stable particles IDs: {stable_particles}")
+
+
+
+    # # View the data
+    # print("Particles DataFrame:")
+    # print(particles_df.head(n=10))
+    # print(len(particles_df))
+
+    # print("\nDecays DataFrame:")
+    # print(decays_df.head(n=10))
+
+
+    # # Example usage of the helper functions
+    counter = 0
+    counter_2 = 0
+    for particle_id in particles_df["ID"]:
+        counter_2 += 1
+        if decay_to_pion_chain_helper(particle_id):
+            # print(f"Particle ID {particle_id} decays into a pion.")
+            counter += 1
+        else:
+            print(f"Particle ID {particle_id} does not decay into a pion.")
+
+    print(f"\nTotal particles checked: {counter_2}")
+    print(f"\nTotal particles that decay into a pion: {counter}")
+
+
+    # Example usage of the branchratio_of_chain_helper function
+    # list_depth_values = []
+    # for particle_id in particles_df["ID"]:
+    #     decay_chain = decay_chain_helper(particle_id)
+    #     paths = get_value_paths(decay_chain)
+    #     dict_depth_value = list_depth(decay_chain)
+    #     list_depth_values.append(dict_depth_value)
+    #     print(f"Depth of decay chain for particle ID {particle_id}: {dict_depth_value}")
+    # print(f"Maximum depth of decay chains: {max(list_depth_values)}")
+
+
+    # print()
+    # decay = decay_chain_helper(331)
+    # print(f"Decay chain for particle ID 331: {decay}")
+    # paths = get_value_paths(decay)
+    # print(f"Paths in decay chain for particle ID 331: {paths}")
+    # dict_depth_value = list_depth(decay)
+    # print(f"Depth of decay chain for particle ID 331: {dict_depth_value}")
+
+
+
+    # Example of deleting a particle
+    # delete_particle_helper(2001034)  
+    # delete_particle_helper(2001033) 
+    # print("Particles DataFrame:")
+    # print(particles_df.head(n=10))
+    # print("\nDecays DataFrame:")
+    # print(decays_df.head(n=10))
+
+
+    # print("\n")
+    # print(particles_df["Mass (GeV)"])
+
+    # plt.plot(particles_df["Mass (GeV)"], marker='o', linestyle='None')
+    # plt.show()
+
+
+
+    # Output path
+    # output_path = "decays_PDG2016Plus_massorder_new.dat"
+
+    # parse_to_dat(output_path, particles_df, decays_df)
+
+    return 0
+
+
+
+if __name__ == "__main__":
+    main()
 
 
 
