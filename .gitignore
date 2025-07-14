@@ -3,4 +3,8 @@ decays_PDG2016Plus_massorder_original.dat
 readme_original.txt
 decays_PDG2016Plus_massorder_reversed.dat
 decays_QM2016Plus_massorder.dat
+Plots/total_branching_ratio_to_pionmin.png
+Plots/total_branching_ratio_to_pionplu.png
+Plots/total_branching_ratio_to_pions.png
+.gitignore
 

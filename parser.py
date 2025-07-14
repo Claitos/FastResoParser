@@ -360,7 +360,7 @@ def main():
 
 
     # Example usage of the decay_chain_helper function
-    test_id = 2000016   #eta prime id = 331
+    test_id = 331   #eta prime id = 331
     # print()
     # decay, br = decay_chain_helper(test_id)
     # print(f"Decay chain for particle ID {test_id}: {decay}")
@@ -380,8 +380,30 @@ def main():
     combined.sort(key=lambda x: x[1], reverse=True)  # Sort by branching ratio in descending order
     for decay_path, br in combined:
         print(f"Decay chain to pions for particle ID {test_id}:  Path: {decay_path}, Branching Ratio: {br:.9f}")   
+    
+    total_br = sum(branching_ratio_to_pion)
+    print(f"Total branching ratio for particle ID {test_id} decaying into pions: {total_br:.9f}")
+    print(f"Number of decay paths to pions for particle ID {test_id}: {len(decay_chain_to_pion)}")
 
 
+    # Loop to check total branching ratios for all particles to pions
+    total_brs = []
+    for particle_id in particles_df["ID"]:
+        decay_chain_to_pion, branching_ratio_to_pion = branchratio_of_particle_to_pions(particle_id)
+        total_br = sum(branching_ratio_to_pion)
+        if total_br > 0:
+            print(f"Particle ID {particle_id} decays into pions with total branching ratio: {total_br:.9f}")
+            total_brs.append(total_br)
+        else:
+            print(f"Particle ID {particle_id} does not decay into pions.")
+            total_brs.append(0.0)
+
+    plt.plot(total_brs, marker='.', linestyle='None')
+    plt.xlabel("Particle Number in the list")
+    plt.ylabel(r"Total Branching Ratio to $\pi^+$")
+    plt.title(r"Total Branching Ratio to $\pi^+$ for all Particles")
+    plt.show()
+    #plt.savefig("Plots/total_branching_ratio_to_pionplu.png", dpi = 300)
 
     # Example of deleting a particle
     # delete_particle_helper(2001034)  
