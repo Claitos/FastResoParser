@@ -268,8 +268,10 @@ def branchratio_of_particle_to_pions(particle_id: int) -> tuple[list, list]:
     - decays_to_pions: List of decay paths that lead to pions.
     - branching_ratios_to_pions: List of branching ratios corresponding to the decay paths to pions.    
     """
-
-    pion_id = 211  # PDG ID for pion
+    test_ids = (211,)  # PDG ID for pion
+    #test_ids = (211, -211)  # PDG IDs for pion and antipion
+    test_ids_str = tuple(str(x) for x in test_ids)  # Convert to string
+    test_ids_str_prefix = tuple("_" + str(x) for x in test_ids)  # Convert to string with prefix
     decay_list, branching_ratios = decay_chain_helper(particle_id)
     decay_paths = get_value_paths(decay_list)
     branching_ratios_paths = get_value_paths(branching_ratios)
@@ -280,7 +282,7 @@ def branchratio_of_particle_to_pions(particle_id: int) -> tuple[list, list]:
     decays_to_pions = [] # List to store decay paths that lead to pions
     branching_ratios_to_pions = []  # List to store branching ratios corresponding to decay paths to pions
     for i in range(len(decay_paths)):
-        if decay_paths[i].endswith((str(pion_id), str(-pion_id))):
+        if decay_paths[i].endswith(test_ids_str_prefix) or decay_paths[i] in test_ids_str:
             br_steps = branching_ratios_paths[i].split('_')
             br_steps_float = [float(x) for x in br_steps]
             product_br = m.prod(br_steps_float)
@@ -345,7 +347,7 @@ def main():
     # print(f"\nTotal particles that decay into a pion: {counter}")
 
 
-    # Example usage of the branchratio_of_chain_helper function
+    # Example usage of the list_depth function to check the depth of decay chains
     # list_depth_values = []
     # for particle_id in particles_df["ID"]:
     #     decay_chain, branching_ratios = decay_chain_helper(particle_id)
@@ -358,7 +360,7 @@ def main():
 
 
     # Example usage of the decay_chain_helper function
-    test_id = 331
+    test_id = 2000016   #eta prime id = 331
     # print()
     # decay, br = decay_chain_helper(test_id)
     # print(f"Decay chain for particle ID {test_id}: {decay}")
