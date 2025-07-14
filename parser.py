@@ -1,6 +1,7 @@
 import pandas as pd
 import math as m
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def parse_to_df(file_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -296,6 +297,16 @@ def branchratio_of_particle_to_pions(particle_id: int) -> tuple[list, list]:
 
 
 
+def importance_score(particle_id: int) -> float:
+    decay_chain_to_pion, branching_ratio_to_pion = branchratio_of_particle_to_pions(particle_id)
+    total_br = sum(branching_ratio_to_pion)
+    mass = particles_df.loc[particles_df["ID"] == particle_id, "Mass (GeV)"].values[0]
+    # print(f"Particle ID {particle_id} has mass {mass:.9f} GeV and total branching ratio to pions {total_br:.9f}")
+    temperature = 0.140  # This can be adjusted based on the system's temperature
+    exponential_factor = np.exp(-mass/temperature)  # This can be adjusted based on the importance of the particle
+    # print(f"Exponential factor for particle ID {particle_id}: {exponential_factor:.9f}")
+    importance = total_br * exponential_factor
+    return importance
 
 
 
@@ -332,6 +343,7 @@ def main():
     # print(decays_df.head(n=10))
 
 
+
     # # Example usage of the helper functions
     # counter = 0
     # counter_2 = 0
@@ -347,6 +359,7 @@ def main():
     # print(f"\nTotal particles that decay into a pion: {counter}")
 
 
+
     # Example usage of the list_depth function to check the depth of decay chains
     # list_depth_values = []
     # for particle_id in particles_df["ID"]:
@@ -357,6 +370,7 @@ def main():
     #     list_depth_values.append(dict_depth_value)
     #     print(f"Depth of decay chain for particle ID {particle_id}: {dict_depth_value}")
     # print(f"Maximum depth of decay chains: {max(list_depth_values)}")
+
 
 
     # Example usage of the decay_chain_helper function
@@ -373,6 +387,8 @@ def main():
     # dict_depth_value = list_depth(decay)
     # print(f"Depth of decay chain for particle ID {test_id}: {dict_depth_value}")
 
+
+
     # Example usage of the branchratio_of_particle_to_pions function
     decay_chain_to_pion, branching_ratio_to_pion = branchratio_of_particle_to_pions(test_id)
 
@@ -386,24 +402,49 @@ def main():
     print(f"Number of decay paths to pions for particle ID {test_id}: {len(decay_chain_to_pion)}")
 
 
-    # Loop to check total branching ratios for all particles to pions
-    total_brs = []
-    for particle_id in particles_df["ID"]:
-        decay_chain_to_pion, branching_ratio_to_pion = branchratio_of_particle_to_pions(particle_id)
-        total_br = sum(branching_ratio_to_pion)
-        if total_br > 0:
-            print(f"Particle ID {particle_id} decays into pions with total branching ratio: {total_br:.9f}")
-            total_brs.append(total_br)
-        else:
-            print(f"Particle ID {particle_id} does not decay into pions.")
-            total_brs.append(0.0)
 
-    plt.plot(total_brs, marker='.', linestyle='None')
-    plt.xlabel("Particle Number in the list")
-    plt.ylabel(r"Total Branching Ratio to $\pi^+$")
-    plt.title(r"Total Branching Ratio to $\pi^+$ for all Particles")
-    plt.show()
+    # Loop to check total branching ratios for all particles to pions
+    # total_brs = []
+    # for particle_id in particles_df["ID"]:
+    #     decay_chain_to_pion, branching_ratio_to_pion = branchratio_of_particle_to_pions(particle_id)
+    #     total_br = sum(branching_ratio_to_pion)
+    #     if total_br > 0:
+    #         print(f"Particle ID {particle_id} decays into pions with total branching ratio: {total_br:.9f}")
+    #         total_brs.append(total_br)
+    #     else:
+    #         print(f"Particle ID {particle_id} does not decay into pions.")
+    #         total_brs.append(0.0)
+
+    # plt.plot(total_brs, marker='.', linestyle='None')
+    # plt.xlabel("Particle Number in the list")
+    # plt.ylabel(r"Total Branching Ratio to $\pi^+$")
+    # plt.title(r"Total Branching Ratio to $\pi^+$ for all Particles")
+    #plt.show()
     #plt.savefig("Plots/total_branching_ratio_to_pionplu.png", dpi = 300)
+
+
+
+    # Example usage of the importance_score function
+    particle_id = 331  # Example particle ID
+    importance = importance_score(particle_id)
+    print(f"Importance score for particle ID {particle_id}: {importance:.9f}")
+
+    # Loop to calculate importance scores for all particles
+    # importance_scores = []
+    # for particle_id in particles_df["ID"]:
+    #     importance = importance_score(particle_id)
+    #     importance_scores.append(importance)
+
+    # plt.plot(importance_scores, marker='.', linestyle='None')
+    # plt.xlabel("Particle Number in the list")
+    # plt.ylabel("Importance Score")
+    # plt.title("Importance Score for all Particles")
+    # plt.yscale('symlog', linthresh=1e-12)
+    #plt.show()
+    #plt.savefig("Plots/importance_score_all_particles.png", dpi = 300)
+
+    
+
 
     # Example of deleting a particle
     # delete_particle_helper(2001034)  
