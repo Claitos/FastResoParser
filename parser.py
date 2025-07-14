@@ -1,4 +1,5 @@
 import pandas as pd
+import math as m
 import matplotlib.pyplot as plt
 
 
@@ -179,33 +180,43 @@ def decay_to_pion_chain_helper(particle_id: int) -> bool:
 
 
 
-def list_depth(lst):
+def list_depth(lst: list) -> int:
     if not isinstance(lst, list):
         return 0
     return 1 + max((list_depth(item) for item in lst), default=0)
 
 
-def get_value_paths(data, prefix=''):
+def get_value_paths(data:list, prefix='', sep="_") -> list:
+    """
+    Recursively retrieves paths to all integer values in a nested list structure.
+    Each path is represented as a string with dot notation.
+
+    :param data: The nested list structure to search.
+    :param prefix: The current path prefix (used for recursion).
+    :param sep: The separator to use between path elements (default is underscore).
+    :return: A list of paths to integer values.
+    """
+    
     paths = []
     i = 0
     while i < len(data):
         item = data[i]
 
-        if isinstance(item, int):
+        if isinstance(item, (int, float)):
             # If followed by a list → descend
             if i + 1 < len(data) and isinstance(data[i + 1], list):
-                new_prefix = f"{prefix}.{item}" if prefix else str(item)
-                paths.extend(get_value_paths(data[i + 1], new_prefix))
+                new_prefix = f"{prefix}{sep}{item}" if prefix else str(item)
+                paths.extend(get_value_paths(data[i + 1], new_prefix, sep))
                 i += 2
             else:
                 # Standalone int → treat as leaf
-                full_path = f"{prefix}.{item}" if prefix else str(item)
+                full_path = f"{prefix}{sep}{item}" if prefix else str(item)
                 paths.append(full_path)
                 i += 1
 
         elif isinstance(item, list):
             # List not preceded by int (rare in your case), descend flat
-            paths.extend(get_value_paths(item, prefix))
+            paths.extend(get_value_paths(item, prefix, sep))
             i += 1
 
         else:
@@ -214,18 +225,21 @@ def get_value_paths(data, prefix=''):
     return paths
 
 
-def decay_chain_helper(particle_id: int) -> list:
+def decay_chain_helper(particle_id: int) -> tuple[list, list]:
     """ 
     Checks the branching ratios of a particle's decay chain to see if it decays into stable particles.
     This function assumes that the particle ID is valid and exists in the decays DataFrame.
-    It returns a dictionary of stable particle IDs and their branching ratios if they are found in the decay chain.
+    It returns two lists of stable particle IDs and their branching ratios if they are found in the decay chain.
 
     :param particle_id: The ID of the particle to check.
-    :return: A list of stable particle IDs and their branching ratios.
+    :return: A tuple containing two lists:
+             - decay_chain: List of stable particle IDs in the decay chain.
+             - branching_ratios: List of branching ratios corresponding to the decay chain.
     """
 
     decays_of_particle = decays_df[decays_df["ParentID"] == particle_id]  # Filter decays for the given particle ID
-    decay_chain = [] # Dictionary to store branching ratios of decay
+    decay_chain = [] # List to store branching ratios of decay
+    branching_ratios = []  # List to store branching ratios of decay
 
     for _, decay in decays_of_particle.iterrows():
         for product_id in decay["ProductIDs"]:
@@ -233,19 +247,50 @@ def decay_chain_helper(particle_id: int) -> list:
                 continue
             elif product_id in stable_particles:
                 decay_chain.append(product_id)  # Add stable particle ID to the decay chain
+                branching_ratios.append(decay["BranchingRatio"])
                 continue
             else:
                 decay_chain.append(product_id)  # Add the product ID to the decay chain
-                child_decay_chain = decay_chain_helper(product_id)
+                branching_ratios.append(decay["BranchingRatio"])
+                child_decay_chain, child_branching_ratios = decay_chain_helper(product_id)
                 if child_decay_chain:
                     decay_chain.append(child_decay_chain)
+                    branching_ratios.append(child_branching_ratios)
 
-    return decay_chain
+    return decay_chain, branching_ratios
 
 
+def branchratio_of_particle_to_pions(particle_id: int) -> tuple[list, list]:
+    """
+    Checks the decay chain of a particle to see if it decays into pions (or antipions).
+    This function assumes that the particle ID is valid and exists in the decays DataFrame.
+    It returns two lists:
+    - decays_to_pions: List of decay paths that lead to pions.
+    - branching_ratios_to_pions: List of branching ratios corresponding to the decay paths to pions.    
+    """
 
-def branchratio_of_chain_to_pions_helper(particle_id: int) -> list:
-    return 0
+    pion_id = 211  # PDG ID for pion
+    decay_list, branching_ratios = decay_chain_helper(particle_id)
+    decay_paths = get_value_paths(decay_list)
+    branching_ratios_paths = get_value_paths(branching_ratios)
+
+    if len(decay_paths) != len(branching_ratios_paths):
+        raise ValueError("Mismatch between the lengths of decay paths and branching ratios paths.")
+
+    decays_to_pions = [] # List to store decay paths that lead to pions
+    branching_ratios_to_pions = []  # List to store branching ratios corresponding to decay paths to pions
+    for i in range(len(decay_paths)):
+        if decay_paths[i].endswith((str(pion_id), str(-pion_id))):
+            br_steps = branching_ratios_paths[i].split('_')
+            br_steps_float = [float(x) for x in br_steps]
+            product_br = m.prod(br_steps_float)
+            # print(f"Particle ID {particle_id} decays into a pion through path: {decay_paths[i]} with branching ratios {branching_ratios_paths[i]} and product branching ratio {product_br:.9f}")
+            # print(f"Particle ID {particle_id} decays into a pion through path: {decay_paths[i]} with branching ratio {product_br:.9f}")
+
+            decays_to_pions.append(decay_paths[i])
+            branching_ratios_to_pions.append(product_br)
+
+    return decays_to_pions, branching_ratios_to_pions
 
 
 
@@ -271,8 +316,8 @@ def main():
     global stable_particles  # Declare as global to use in helper functions
     stable_particles_test = particles_df[particles_df["Width (GeV)"] == 0.0]
     stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
-    print(f"Number of stable particles: {len(stable_particles)}")
-    print(f"Stable particles IDs: {stable_particles}")
+    # print(f"Number of stable particles: {len(stable_particles)}")
+    # print(f"Stable particles IDs: {stable_particles}")
 
 
 
@@ -286,38 +331,53 @@ def main():
 
 
     # # Example usage of the helper functions
-    counter = 0
-    counter_2 = 0
-    for particle_id in particles_df["ID"]:
-        counter_2 += 1
-        if decay_to_pion_chain_helper(particle_id):
-            # print(f"Particle ID {particle_id} decays into a pion.")
-            counter += 1
-        else:
-            print(f"Particle ID {particle_id} does not decay into a pion.")
+    # counter = 0
+    # counter_2 = 0
+    # for particle_id in particles_df["ID"]:
+    #     counter_2 += 1
+    #     if decay_to_pion_chain_helper(particle_id):
+    #         # print(f"Particle ID {particle_id} decays into a pion.")
+    #         counter += 1
+    #     else:
+    #         print(f"Particle ID {particle_id} does not decay into a pion.")
 
-    print(f"\nTotal particles checked: {counter_2}")
-    print(f"\nTotal particles that decay into a pion: {counter}")
+    # print(f"\nTotal particles checked: {counter_2}")
+    # print(f"\nTotal particles that decay into a pion: {counter}")
 
 
     # Example usage of the branchratio_of_chain_helper function
     # list_depth_values = []
     # for particle_id in particles_df["ID"]:
-    #     decay_chain = decay_chain_helper(particle_id)
+    #     decay_chain, branching_ratios = decay_chain_helper(particle_id)
     #     paths = get_value_paths(decay_chain)
+    #     paths_BR = get_value_paths(branching_ratios)
     #     dict_depth_value = list_depth(decay_chain)
     #     list_depth_values.append(dict_depth_value)
     #     print(f"Depth of decay chain for particle ID {particle_id}: {dict_depth_value}")
     # print(f"Maximum depth of decay chains: {max(list_depth_values)}")
 
 
+    # Example usage of the decay_chain_helper function
+    test_id = 331
     # print()
-    # decay = decay_chain_helper(331)
-    # print(f"Decay chain for particle ID 331: {decay}")
+    # decay, br = decay_chain_helper(test_id)
+    # print(f"Decay chain for particle ID {test_id}: {decay}")
+    # print(f"Branching ratios for particle ID {test_id}: {br}")
     # paths = get_value_paths(decay)
-    # print(f"Paths in decay chain for particle ID 331: {paths}")
+    # br_paths = get_value_paths(br)
+    # print(f"Paths in decay chain for particle ID {test_id}: {paths}")
+    # print(f"Branching ratios paths for particle ID {test_id}: {br_paths}")
+    # print(f"length of paths: {len(paths)} and length of branching ratios: {len(br_paths)}")
     # dict_depth_value = list_depth(decay)
-    # print(f"Depth of decay chain for particle ID 331: {dict_depth_value}")
+    # print(f"Depth of decay chain for particle ID {test_id}: {dict_depth_value}")
+
+    # Example usage of the branchratio_of_particle_to_pions function
+    decay_chain_to_pion, branching_ratio_to_pion = branchratio_of_particle_to_pions(test_id)
+
+    combined = list(zip(decay_chain_to_pion, branching_ratio_to_pion))
+    combined.sort(key=lambda x: x[1], reverse=True)  # Sort by branching ratio in descending order
+    for decay_path, br in combined:
+        print(f"Decay chain to pions for particle ID {test_id}:  Path: {decay_path}, Branching Ratio: {br:.9f}")   
 
 
 
