@@ -430,18 +430,18 @@ def main():
     print(f"Importance score for particle ID {particle_id}: {importance:.9f}")
 
     # Loop to calculate importance scores for all particles
-    # importance_scores = []
-    # for particle_id in particles_df["ID"]:
-    #     importance = importance_score(particle_id)
-    #     importance_scores.append(importance)
+    importance_scores = []
+    for particle_id in particles_df["ID"]:
+        importance = importance_score(particle_id)
+        importance_scores.append(importance)
 
-    # plt.plot(importance_scores, marker='.', linestyle='None')
-    # plt.xlabel("Particle Number in the list")
-    # plt.ylabel("Importance Score")
-    # plt.title("Importance Score for all Particles")
-    # plt.yscale('symlog', linthresh=1e-12)
-    #plt.show()
-    #plt.savefig("Plots/importance_score_all_particles.png", dpi = 300)
+    plt.plot(importance_scores, marker='.', linestyle='None')
+    plt.xlabel("Particle Number in the list")
+    plt.ylabel("Importance Score")
+    plt.title("Importance Score for all Particles")
+    plt.yscale('symlog', linthresh=1e-12)
+    plt.show()
+    #plt.savefig("Plots/importance_score_all_particles_both.png", dpi = 300)
 
     
 
