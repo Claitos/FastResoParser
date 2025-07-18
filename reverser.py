@@ -1,5 +1,6 @@
-inputfile = "decays_PDG2016Plus_massorder_new.dat"
-outputfile = "decays_PDG2016Plus_massorder_new_reversed.dat"
+cut = 0.001
+inputfile = f"decays_PDG2016Plus_massorder_{cut}.dat"
+outputfile = f"decays_PDG2016Plus_massorder_{cut}_reversed.dat"
 
 # Read the file and reverse the lines
 with open(inputfile, "r") as file:
