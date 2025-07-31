@@ -1,6 +1,6 @@
 import pandas as pd
 import math as m
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -473,18 +473,18 @@ def main():
     # print(f"Importance score for particle ID {particle_id}: {importance:.9f}")
 
     # # # Loop to calculate importance scores for all particles
-    # importance_scores = []
-    # for particle_id in particles_df["ID"]:
-    #     importance = importance_score(particle_id)
-    #     importance_scores.append(importance)
+    importance_scores = []
+    for particle_id in particles_df["ID"]:
+        importance = importance_score(particle_id)
+        importance_scores.append(importance)
 
-    # plt.plot(importance_scores, marker='.', linestyle='None')
-    # plt.xlabel("Particle Number in the list")
-    # plt.ylabel("Importance Score")
-    # plt.title("Importance Score = BR * exp(-mass/T) * degeneracy")
-    # plt.yscale('symlog', linthresh=1e-12)
-    # plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-    # plt.show()
+    plt.plot(importance_scores, marker='.', linestyle='None')
+    plt.xlabel("Particle Number in the list")
+    plt.ylabel("Importance Score")
+    plt.title("Importance Score = BR * exp(-mass/T) * degeneracy")
+    plt.yscale('symlog', linthresh=1e-12)
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    plt.show()
     #plt.savefig("Plots/importance_score_all_particles.png", dpi = 300)
 
 
@@ -492,7 +492,7 @@ def main():
 
     # Example usage of the delete_particle_list_helper function
 
-    cut = 1e-2  # Threshold for importance score
+    cut = 0.0001  # Threshold for importance score
     important_particles = []
     for particle_id in particles_df["ID"]:
         importance = importance_score(particle_id)
@@ -501,7 +501,7 @@ def main():
 
     print(f"Important particles (importance > {cut}): {important_particles}")
 
-    delete_particle_list_helper(important_particles)
+    #delete_particle_list_helper(important_particles)
         
     # print("Particles DataFrame:")
     # print(particles_df.head(n=10))
@@ -530,9 +530,9 @@ def main():
 
 
     # Output path
-    output_path = f"decays_PDG2016Plus_massorder_{cut}.dat"
+    #output_path = f"decays_PDG2016Plus_massorder_{cut}.dat"
 
-    parse_to_dat(output_path, particles_df, decays_df)
+    #parse_to_dat(output_path, particles_df, decays_df)
 
     return 0
 
