@@ -1,4 +1,4 @@
-cut = 0.0001
+cut = 1e-09
 inputfile = f"decays_PDG2016Plus_massorder_{cut}.dat"
 outputfile = f"decays_PDG2016Plus_massorder_{cut}_reversed.dat"
 

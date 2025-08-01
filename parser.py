@@ -414,7 +414,7 @@ def main():
 
 
     # Example usage of the decay_chain_helper function
-    test_id = 331   #eta prime id = 331
+    # test_id = 331   #eta prime id = 331
     # print()
     # decay, br = decay_chain_helper(test_id)
     # print(f"Decay chain for particle ID {test_id}: {decay}")
@@ -431,16 +431,17 @@ def main():
 
 
     # Example usage of the branchratio_of_particle_to_pions function
-    decay_chain_to_pion, branching_ratio_to_pion = branchratio_of_particle_to_pions(test_id)
+    # test_id = 331  # Example particle ID (eta prime)
+    # decay_chain_to_pion, branching_ratio_to_pion = branchratio_of_particle_to_pions(test_id)
 
-    combined = list(zip(decay_chain_to_pion, branching_ratio_to_pion))
-    combined.sort(key=lambda x: x[1], reverse=True)  # Sort by branching ratio in descending order
-    for decay_path, br in combined:
-        print(f"Decay chain to pions for particle ID {test_id}:  Path: {decay_path}, Branching Ratio: {br:.9f}")   
+    # combined = list(zip(decay_chain_to_pion, branching_ratio_to_pion))
+    # combined.sort(key=lambda x: x[1], reverse=True)  # Sort by branching ratio in descending order
+    # for decay_path, br in combined:
+    #     print(f"Decay chain to pions for particle ID {test_id}:  Path: {decay_path}, Branching Ratio: {br:.9f}")   
     
-    total_br = sum(branching_ratio_to_pion)
-    print(f"Total branching ratio for particle ID {test_id} decaying into pions: {total_br:.9f}")
-    print(f"Number of decay paths to pions for particle ID {test_id}: {len(decay_chain_to_pion)}")
+    # total_br = sum(branching_ratio_to_pion)
+    # print(f"Total branching ratio for particle ID {test_id} decaying into pions: {total_br:.9f}")
+    # print(f"Number of decay paths to pions for particle ID {test_id}: {len(decay_chain_to_pion)}")
 
 
 
@@ -492,7 +493,7 @@ def main():
 
     # Example usage of the delete_particle_list_helper function
 
-    cut = 0.0001  # Threshold for importance score
+    cut = 1e-02  # Threshold for importance score
     important_particles = []
     for particle_id in particles_df["ID"]:
         importance = importance_score(particle_id)
@@ -501,7 +502,7 @@ def main():
 
     print(f"Important particles (importance > {cut}): {important_particles}")
 
-    #delete_particle_list_helper(important_particles)
+    delete_particle_list_helper(important_particles)
         
     # print("Particles DataFrame:")
     # print(particles_df.head(n=10))
@@ -530,9 +531,9 @@ def main():
 
 
     # Output path
-    #output_path = f"decays_PDG2016Plus_massorder_{cut}.dat"
+    output_path = f"decays_PDG2016Plus_massorder_{cut}.dat"
 
-    #parse_to_dat(output_path, particles_df, decays_df)
+    parse_to_dat(output_path, particles_df, decays_df)
 
     return 0
 
