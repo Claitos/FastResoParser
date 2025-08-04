@@ -485,15 +485,15 @@ def main():
     plt.title("Importance Score = BR * exp(-mass/T) * degeneracy")
     plt.yscale('symlog', linthresh=1e-12)
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-    plt.show()
-    #plt.savefig("Plots/importance_score_all_particles.png", dpi = 300)
+    #plt.show()
+    plt.savefig("Plots/importance_score_all_particles_both.png", dpi = 300)
 
 
 
 
     # Example usage of the delete_particle_list_helper function
 
-    cut = 1e-02  # Threshold for importance score
+    cut = 1e-09  # Threshold for importance score
     important_particles = []
     for particle_id in particles_df["ID"]:
         importance = importance_score(particle_id)
@@ -502,8 +502,14 @@ def main():
 
     print(f"Important particles (importance > {cut}): {important_particles}")
 
-    delete_particle_list_helper(important_particles)
+    all_important_particles = important_particles + stable_particles  # Keep a copy of all important particles
+    all_important_particles_unique = list(set(all_important_particles))  # Remove duplicates
+    print(f"All important particles (including stable particles): {all_important_particles_unique}")
+
+    delete_particle_list_helper(all_important_particles_unique)
         
+
+
     # print("Particles DataFrame:")
     # print(particles_df.head(n=10))
     # print(f"total number of particles of deletion : {len(particles_df)}")
@@ -531,7 +537,7 @@ def main():
 
 
     # Output path
-    output_path = f"decays_PDG2016Plus_massorder_{cut}.dat"
+    output_path = f"cuts_pi+stable/decays_PDG2016Plus_massorder_{cut}.dat"
 
     parse_to_dat(output_path, particles_df, decays_df)
 

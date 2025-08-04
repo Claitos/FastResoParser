@@ -1,6 +1,7 @@
 cut = 1e-09
-inputfile = f"decays_PDG2016Plus_massorder_{cut}.dat"
-outputfile = f"decays_PDG2016Plus_massorder_{cut}_reversed.dat"
+dir_name = "cuts_pi+stable"
+inputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}.dat"
+outputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}_reversed.dat"
 
 # Read the file and reverse the lines
 with open(inputfile, "r") as file:
