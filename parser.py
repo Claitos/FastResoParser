@@ -493,7 +493,7 @@ def main():
 
     # Example usage of the delete_particle_list_helper function
 
-    cut = 1e-09  # Threshold for importance score
+    cut = 1e-06  # Threshold for importance score
     important_particles = []
     for particle_id in particles_df["ID"]:
         importance = importance_score(particle_id)
@@ -501,6 +501,7 @@ def main():
             important_particles.append(particle_id)
 
     print(f"Important particles (importance > {cut}): {important_particles}")
+    print(f"Number of important particles: {len(important_particles)}")
 
     all_important_particles = important_particles + stable_particles  # Keep a copy of all important particles
     all_important_particles_unique = list(set(all_important_particles))  # Remove duplicates
@@ -537,9 +538,9 @@ def main():
 
 
     # Output path
-    output_path = f"cuts_pi+stable/decays_PDG2016Plus_massorder_{cut}.dat"
+    # output_path = f"cuts_pi+stable/decays_PDG2016Plus_massorder_{cut}.dat"
 
-    parse_to_dat(output_path, particles_df, decays_df)
+    # parse_to_dat(output_path, particles_df, decays_df)
 
     return 0
 
