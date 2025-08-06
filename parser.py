@@ -130,10 +130,10 @@ def delete_particle_helper(particle_id: int):
     decays_df.drop(decays_df[decays_df["ParentID"] == particle_id].index, inplace=True)
 
 
-def delete_particle_list_helper(particle_ids: list[int]):
+def delete_particle_list_helper(particle_ids: list[int], particles_df: pd.DataFrame, decays_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     particle_list = []
     for particle_id in particle_ids:
-        decay_list, _ = decay_chain_helper(particle_id)
+        decay_list, _ = decay_chain_helper(particle_id, particles_df, decays_df)  # Get the decay chain for the particle
         decay_paths = get_value_paths(decay_list)
         particle_list.append(particle_id)  # Add the particle ID itself
         for decay_path in decay_paths:
@@ -145,20 +145,11 @@ def delete_particle_list_helper(particle_ids: list[int]):
     particle_list_unique = list(set(particle_list))  # Remove duplicates
     # print(f"Unique particle steps to keep: {particle_list_unique}")
 
-
-    if 'particles_df' not in globals():
-        raise NameError("particles_df is not defined. Make sure to run the parser first.")
-    
-    if 'decays_df' not in globals():
-        raise NameError("decays_df is not defined. Make sure to run the parser first.")
-    
-
     # Filter the particles_df and decays_df to keep only the particles in particle_list_unique
-    global particles_df, decays_df  # Declare as global to modify in this function
     particles_df = particles_df[particles_df["ID"].isin(particle_list_unique)].reset_index(drop=True)
     decays_df = decays_df[decays_df["ParentID"].isin(particle_list_unique)].reset_index(drop=True)  
 
-
+    return (particles_df, decays_df)
 
 
 
@@ -263,7 +254,7 @@ def get_value_paths(data:list, prefix='', sep="_") -> list:
     return paths
 
 
-def decay_chain_helper(particle_id: int) -> tuple[list, list]:
+def decay_chain_helper(particle_id: int, particles_df: pd.DataFrame, decays_df: pd.DataFrame) -> tuple[list, list]:
     """ 
     Checks the branching ratios of a particle's decay chain to see if it decays into stable particles.
     This function assumes that the particle ID is valid and exists in the decays DataFrame.
@@ -274,6 +265,9 @@ def decay_chain_helper(particle_id: int) -> tuple[list, list]:
              - decay_chain: List of stable particle IDs in the decay chain.
              - branching_ratios: List of branching ratios corresponding to the decay chain.
     """
+
+    stable_particles_test = particles_df[particles_df["Width (GeV)"] == 0.0]
+    stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
 
     decays_of_particle = decays_df[decays_df["ParentID"] == particle_id]  # Filter decays for the given particle ID
     decay_chain = [] # List to store branching ratios of decay
@@ -290,7 +284,7 @@ def decay_chain_helper(particle_id: int) -> tuple[list, list]:
             else:
                 decay_chain.append(product_id)  # Add the product ID to the decay chain
                 branching_ratios.append(decay["BranchingRatio"])
-                child_decay_chain, child_branching_ratios = decay_chain_helper(product_id)
+                child_decay_chain, child_branching_ratios = decay_chain_helper(product_id, particles_df, decays_df)
                 if child_decay_chain:
                     decay_chain.append(child_decay_chain)
                     branching_ratios.append(child_branching_ratios)
@@ -298,7 +292,7 @@ def decay_chain_helper(particle_id: int) -> tuple[list, list]:
     return decay_chain, branching_ratios
 
 
-def branchratio_of_particle_to_pions(particle_id: int) -> tuple[list, list]:
+def branchratio_of_particle_to_pions(particle_id: int, particles_df: pd.DataFrame, decays_df: pd.DataFrame) -> tuple[list, list]:
     """
     Checks the decay chain of a particle to see if it decays into pions (or antipions).
     This function assumes that the particle ID is valid and exists in the decays DataFrame.
@@ -310,7 +304,7 @@ def branchratio_of_particle_to_pions(particle_id: int) -> tuple[list, list]:
     #test_ids = (211, -211)  # PDG IDs for pion and antipion
     test_ids_str = tuple(str(x) for x in test_ids)  # Convert to string
     test_ids_str_prefix = tuple("_" + str(x) for x in test_ids)  # Convert to string with prefix
-    decay_list, branching_ratios = decay_chain_helper(particle_id)
+    decay_list, branching_ratios = decay_chain_helper(particle_id, particles_df, decays_df)
     decay_paths = get_value_paths(decay_list)
     branching_ratios_paths = get_value_paths(branching_ratios)
 
@@ -333,12 +327,23 @@ def branchratio_of_particle_to_pions(particle_id: int) -> tuple[list, list]:
     return decays_to_pions, branching_ratios_to_pions
 
 
-def importance_score(particle_id: int) -> float:
-    decay_chain_to_pion, branching_ratio_to_pion = branchratio_of_particle_to_pions(particle_id)
+def importance_score(particle_id: int, particles_df: pd.DataFrame, decays_df: pd.DataFrame) -> float:
+    """    
+    Calculates the importance score of a particle based on its branching ratio to pions, mass, and degeneracy.
+    The importance score is defined as:
+    Importance = BR * exp(-mass/T) * degeneracy
+    where BR is the total branching ratio to pions, mass is the mass of the particle,
+    T is the temperature (default is 0.140 GeV), and degeneracy is the degeneracy of the particle.
+    This function assumes that the particle ID is valid and exists in the particles DataFrame.
+
+    :param particle_id: The ID of the particle to calculate the importance score for.
+    :return: The importance score of the particle.
+    """
+    decay_chain_to_pion, branching_ratio_to_pion = branchratio_of_particle_to_pions(particle_id, particles_df, decays_df)
     total_br = sum(branching_ratio_to_pion)
     mass = particles_df.loc[particles_df["ID"] == particle_id, "Mass (GeV)"].values[0]
     degeneracy = particles_df.loc[particles_df["ID"] == particle_id, "Degeneracy"].values[0]
-    #print(f"Particle ID {particle_id} has mass {mass:.9f} GeV, degeneracy {degeneracy}, and total branching ratio to pions {total_br:.9f}")
+    # print(f"Particle ID {particle_id} has mass {mass:.9f} GeV, degeneracy {degeneracy}, and total branching ratio to pions {total_br:.9f}")
     temperature = 0.140  # This can be adjusted based on the system's temperature
     exponential_factor = np.exp(-mass/temperature)  # This can be adjusted based on the importance of the particle
     # print(f"Exponential factor for particle ID {particle_id}: {exponential_factor:.9f}")
@@ -348,10 +353,42 @@ def importance_score(particle_id: int) -> float:
 
 
 
+def cutting_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test") -> None:
+    """
+    Applies a cutting routine to filter particles based on their importance score.
+    It keeps particles with an importance score above the specified cut value.
+    The function also retains stable particles in the final list.
+
+    :param cuts: The threshold for the importance score to keep a particle.
+    :param dir_name: The directory name where the output file will be saved.
+    :return: None
+    """
+    
+    file_path = "decays_PDG2016Plus_massorder_original.dat"
+
+    particles_df, decays_df = parse_to_df(file_path)
+
+    stable_particles_test = particles_df[particles_df["Width (GeV)"] == 0.0]
+    stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
+    
+    for cut in cuts:
+        important_particles = []
+        for particle_id in particles_df["ID"]:
+            importance = importance_score(particle_id, particles_df, decays_df)
+            if importance > cut:  # Threshold for importance
+                important_particles.append(particle_id)
+
+        all_important_particles = important_particles + stable_particles  # Keep a copy of all important particles
+        all_important_particles_unique = list(set(all_important_particles))  # Remove duplicates
+
+        particles_df_cut, decays_df_cut = delete_particle_list_helper(all_important_particles_unique, particles_df, decays_df)
+        output_path = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}.dat"
+        parse_to_dat(output_path, particles_df_cut, decays_df_cut)
 
 
 
 
+    
 def main():
 
 
@@ -366,8 +403,8 @@ def main():
     global stable_particles  # Declare as global to use in helper functions
     stable_particles_test = particles_df[particles_df["Width (GeV)"] == 0.0]
     stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
-    # print(f"Number of stable particles: {len(stable_particles)}")
-    # print(f"Stable particles IDs: {stable_particles}")
+    print(f"Number of stable particles: {len(stable_particles)}")
+    print(f"Stable particles IDs: {stable_particles}")
 
 
 
@@ -470,33 +507,33 @@ def main():
 
     # Example usage of the importance_score function
     # particle_id = 331  # Example particle ID
-    # importance = importance_score(particle_id)
+    # importance = importance_score(particle_id, particles_df, decays_df)
     # print(f"Importance score for particle ID {particle_id}: {importance:.9f}")
 
     # # # Loop to calculate importance scores for all particles
-    importance_scores = []
-    for particle_id in particles_df["ID"]:
-        importance = importance_score(particle_id)
-        importance_scores.append(importance)
+    # importance_scores = []
+    # for particle_id in particles_df["ID"]:
+    #     importance = importance_score(particle_id, particles_df, decays_df)
+    #     importance_scores.append(importance)
 
-    plt.plot(importance_scores, marker='.', linestyle='None')
-    plt.xlabel("Particle Number in the list")
-    plt.ylabel("Importance Score")
-    plt.title("Importance Score = BR * exp(-mass/T) * degeneracy")
-    plt.yscale('symlog', linthresh=1e-12)
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-    #plt.show()
-    plt.savefig("Plots/importance_score_all_particles_both.png", dpi = 300)
+    # plt.plot(importance_scores, marker='.', linestyle='None')
+    # plt.xlabel("Particle Number in the list")
+    # plt.ylabel("Importance Score")
+    # plt.title("Importance Score = BR * exp(-mass/T) * degeneracy")
+    # plt.yscale('symlog', linthresh=1e-12)
+    # plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    # plt.show()
+    # #plt.savefig("Plots/importance_score_all_particles_both.png", dpi = 300)
 
 
 
 
     # Example usage of the delete_particle_list_helper function
 
-    cut = 1e-06  # Threshold for importance score
+    cut = 1e-03  # Threshold for importance score
     important_particles = []
     for particle_id in particles_df["ID"]:
-        importance = importance_score(particle_id)
+        importance = importance_score(particle_id, particles_df, decays_df)
         if importance > cut:  # Threshold for importance
             important_particles.append(particle_id)
 
@@ -506,9 +543,9 @@ def main():
     all_important_particles = important_particles + stable_particles  # Keep a copy of all important particles
     all_important_particles_unique = list(set(all_important_particles))  # Remove duplicates
     print(f"All important particles (including stable particles): {all_important_particles_unique}")
+    print(f"Number of all important particles (including stable particles): {len(all_important_particles_unique)}")
 
-    delete_particle_list_helper(all_important_particles_unique)
-        
+    particles_df, decays_df = delete_particle_list_helper(all_important_particles_unique, particles_df, decays_df)
 
 
     # print("Particles DataFrame:")

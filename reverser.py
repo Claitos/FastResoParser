@@ -1,15 +1,45 @@
-cut = 1e-09
-dir_name = "cuts_pi+stable"
-inputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}.dat"
-outputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}_reversed.dat"
 
-# Read the file and reverse the lines
-with open(inputfile, "r") as file:
-    lines = file.readlines()
+def reverser_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test"):
+    """
+    Reverses the lines of the specified file for a given cut and directory name.
+    
+    Args:
+        cut (list[float]): The cut value to be used in the file name.
+        dir_name (str): The directory name where the input file is located.
+    """
+    for cut in cuts:
+        inputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}.dat"
+        outputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}_reversed.dat"
 
-# Reverse the list of lines
-lines.reverse()
+        with open(inputfile, "r") as file:
+            lines = file.readlines()
 
-# Write the reversed lines to a new file
-with open(outputfile, "w") as file:
-    file.writelines(lines)
+        lines.reverse()
+
+        with open(outputfile, "w") as file:
+            file.writelines(lines)
+
+        print(f"Reversed file created: {outputfile}")
+
+
+def main():
+
+    cut = 1e-09
+    dir_name = "cuts_pi+stable"
+    inputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}.dat"
+    outputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}_reversed.dat"
+
+    # Read the file and reverse the lines
+    with open(inputfile, "r") as file:
+        lines = file.readlines()
+
+    # Reverse the list of lines
+    lines.reverse()
+
+    # Write the reversed lines to a new file
+    with open(outputfile, "w") as file:
+        file.writelines(lines)
+
+
+if __name__ == "__main__":
+    main()
