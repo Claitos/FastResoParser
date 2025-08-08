@@ -30,3 +30,6 @@ decays_PDG2016Plus_massorder_1e-09.dat
 __pycache__/parser.cpython-312.pyc
 __pycache__/reverser.cpython-312.pyc
 Dataframes/*
+__pycache__/pdg_lib.cpython-312.pyc
+PDG-related/List_onlymine.txt
+PDG-related/List.txt
