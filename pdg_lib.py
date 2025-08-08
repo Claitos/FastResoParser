@@ -52,9 +52,10 @@ def get_width_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi) -> tuple[list[floa
             try:
                 particle = api.get_particle_by_mcid(mcid)
                 lifetime = list(particle.lifetimes())[0]
-                tau = lifetime.value
-                tau_err_p = lifetime.error_positive
-                tau_err_n = lifetime.error_negative
+                svl = lifetime.summary_values()[0]
+                tau = svl.get_value(units="s")
+                tau_err_p = svl.get_error_positive(units="s")
+                tau_err_n = svl.get_error_negative(units="s")
                 width_errors_pos.append((hbar/(tau**2)) * tau_err_p)
                 width_errors_neg.append((hbar/(tau**2)) * tau_err_n)
             except:
@@ -66,9 +67,10 @@ def get_width_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi) -> tuple[list[floa
             try:
                 particle = api.get_particle_by_mcid(mcid)
                 lifetime = list(particle.lifetimes())[0]
-                tau = lifetime.value
-                tau_err_p = lifetime.error_positive
-                tau_err_n = lifetime.error_negative
+                svl = lifetime.summary_values()[0]
+                tau = svl.get_value(units="s")
+                tau_err_p = svl.get_error_positive(units="s")
+                tau_err_n = svl.get_error_negative(units="s")
                 width_errors_pos.append((hbar/(tau**2)) * tau_err_p)
                 width_errors_neg.append((hbar/(tau**2)) * tau_err_n)
             except:
