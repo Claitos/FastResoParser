@@ -353,7 +353,25 @@ def importance_score(particle_id: int, particles_df: pd.DataFrame, decays_df: pd
 
 
 
-def cutting_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test") -> None:
+def normalize_scores(scores: list) -> list:
+    """
+    Normalizes the importance scores to sum to 1, with pions fixed at 1. Thus their total sum is equal to 2.
+
+    :param scores (list): The list of importance scores to normalize.
+    :return norm_scores (list): The normalized importance scores.
+    """
+    pion_no = 735
+    scores[pion_no] = 0.0  # Set the importance score for pions to 0.0
+    list_np = np.array(scores)
+    sum = np.sum(list_np)
+    norm_list = (list_np / sum).tolist()
+    norm_list[pion_no] = 1.0  # Ensure pions remain at 1.0
+    return norm_list
+
+
+
+
+def cutting_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test", cut_name: bool = True) -> tuple[list[int], list[float]]:
     """
     Applies a cutting routine to filter particles based on their importance score.
     It keeps particles with an importance score above the specified cut value.
@@ -361,7 +379,7 @@ def cutting_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test") ->
 
     :param cuts: The threshold for the importance score to keep a particle.
     :param dir_name: The directory name where the output file will be saved.
-    :return: None
+    :return: A tuple containing the number of particles kept and their total importance score for each list created.
     """
     
     file_path = "decays_PDG2016Plus_massorder_original.dat"
@@ -370,20 +388,52 @@ def cutting_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test") ->
 
     stable_particles_test = particles_df[particles_df["Width (GeV)"] == 0.0]
     stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
-    
-    for cut in cuts:
+
+    importance_scores = []
+    for id in particles_df["ID"]:
+        #print(id)
+        importance = importance_score(id, particles_df, decays_df)
+        importance_scores.append(importance)
+
+    norm_importance_scores = normalize_scores(importance_scores)
+    particles_df["Importance Score"] = norm_importance_scores
+
+    no_particles = []
+    total_scores = []
+
+    for i, cut in enumerate(cuts):
         important_particles = []
-        for particle_id in particles_df["ID"]:
-            importance = importance_score(particle_id, particles_df, decays_df)
+        for _, particle in particles_df.iterrows():
+            importance = particle["Importance Score"]
+            particle_id = particle["ID"]
             if importance > cut:  # Threshold for importance
                 important_particles.append(particle_id)
+                
+        print(f"No. of important particles (importance > {cut}): {len(important_particles)-1}")
+        no_particles.append(len(important_particles)-1)  # exclude pion
 
+        total_score = 0
+        for id in important_particles:
+            importance = particles_df.loc[particles_df["ID"] == id, "Importance Score"].values[0]
+            total_score += importance
+
+        print(f"Total importance score for important particles: {total_score-1:.9f}")
+        total_scores.append(total_score-1)  # exclude pion
+ 
         all_important_particles = important_particles + stable_particles  # Keep a copy of all important particles
         all_important_particles_unique = list(set(all_important_particles))  # Remove duplicates
 
         particles_df_cut, decays_df_cut = delete_particle_list_helper(all_important_particles_unique, particles_df, decays_df)
-        output_path = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}.dat"
+
+        if cut_name == True:
+            output_path = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}.dat"
+        else:
+            output_path = f"{dir_name}/decays_PDG2016Plus_massorder_{i+1}.dat"
+
         parse_to_dat(output_path, particles_df_cut, decays_df_cut)
+
+    
+    return no_particles, total_scores
 
 
 

@@ -7,21 +7,28 @@ import pdg
 
 def get_mass_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi) -> tuple[list[float], list[float]]:
     unit = "GeV"
-    mass_errors_pos = []
-    mass_errors_neg = []
+    mass_errors_pos = [np.nan] * len(p_df)
+    mass_errors_neg = [np.nan] * len(p_df)
     counter = 0
+    #print(f"Processing {len(mass_errors_pos)} {len(mass_errors_neg)} particles for mass errors...")
 
-    for mcid in p_df["ID"]:
-        try:
-            particle = api.get_particle_by_mcid(mcid)
-            counter += 1
-            mass = list(particle.masses())[0]
-            svm = mass.summary_values()[0]
-            mass_errors_pos.append(svm.get_error_positive(units = unit))
-            mass_errors_neg.append(svm.get_error_negative(units = unit))
-        except:
-            mass_errors_pos.append(np.nan)
-            mass_errors_neg.append(np.nan)
+    for i, mcid in enumerate(p_df["ID"]):
+        if np.isnan(mass_errors_pos[i]) or np.isnan(mass_errors_neg[i]):
+            try:
+                particle = api.get_particle_by_mcid(mcid)
+                print(type(particle))
+                counter += 1
+                masses = list(particle.masses(require_summary_data=False))
+                #print(f"len of masses: {len(masses)}")
+                for mass in masses:
+                    try:
+                        svm = mass.summary_values()[0]
+                        mass_errors_pos[i] = svm.get_error_positive(units = unit)
+                        mass_errors_neg[i] = svm.get_error_negative(units = unit)
+                    except:
+                        continue
+            except:
+                continue
 
     print(f"Processed {counter} particles for mass errors.")
 
@@ -32,10 +39,14 @@ def get_mass_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi) -> tuple[list[float
             try:
                 particle = api.get_particle_by_name(name)
                 counter_name += 1
-                mass = list(particle.masses())[0]
-                svm = mass.summary_values()[0]
-                mass_errors_pos[i] = svm.get_error_positive(units = unit)
-                mass_errors_neg[i] = svm.get_error_negative(units = unit)
+                masses = list(particle.masses(require_summary_data=False))
+                for mass in masses:
+                    try:
+                        svm = mass.summary_values()[0]
+                        mass_errors_pos[i] = svm.get_error_positive(units = unit)
+                        mass_errors_neg[i] = svm.get_error_negative(units = unit)
+                    except:
+                        continue
             except:
                 continue
 
@@ -181,21 +192,41 @@ def post_process(p_df: pd.DataFrame) -> pd.DataFrame:
 
         if m_err_p_anti == 0.0:
             p_df.loc[p_df["ID"] == -id, "Mass Error Pos (GeV)"] = m_err_p
-            counter_mass += 1
+            if m_err_p != 0.0:
+                counter_mass += 1
         if m_err_n_anti == 0.0:
             p_df.loc[p_df["ID"] == -id, "Mass Error Neg (GeV)"] = m_err_n
         if w_err_p_anti == 0.0:
             p_df.loc[p_df["ID"] == -id, "Width Error Pos (GeV)"] = w_err_p
-            counter_width += 1
+            if w_err_p != 0.0:
+                counter_width += 1
         if w_err_n_anti == 0.0:
             p_df.loc[p_df["ID"] == -id, "Width Error Neg (GeV)"] = w_err_n
 
-    # print(counter_mass)
-    # print(counter_width)
+    print("Processed anti-particle mass errors:", counter_mass)
+    print("Processed anti-particle width errors:", counter_width)
 
     return p_df
 
 
+
+def format_names(p_df: pd.DataFrame) -> list[str]:
+    """
+    Format the names of the particles in the DataFrame.
+
+    Parameters:
+        p_df (pd.DataFrame): The input particle DataFrame.
+
+    Returns:
+        list[str]: A list of formatted particle names.
+    """
+    formatted_names = []
+    for _, particle in p_df.iterrows():
+        name = particle["Name"]
+        #print(type(name))  ->  str
+        formatted_name = f"{name}"
+        formatted_names.append(formatted_name)
+    return formatted_names
 
 
 

@@ -35,3 +35,8 @@ PDG-related/List_onlymine.txt
 PDG-related/List.txt
 test.txt
 decays_PDG2016Plus_massorder_err.dat
+calculator.ipynb
+Plots/pion_production.png
+Plots/PDG-API/errors_plot.png
+cuts_fine/*
+cuts_finer/*

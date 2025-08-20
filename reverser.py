@@ -1,5 +1,5 @@
 
-def reverser_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test"):
+def reverser_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test", cut_name: bool = True):
     """
     Reverses the lines of the specified file for a given cut and directory name.
     
@@ -7,9 +7,14 @@ def reverser_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test"):
         cut (list[float]): The cut value to be used in the file name.
         dir_name (str): The directory name where the input file is located.
     """
-    for cut in cuts:
-        inputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}.dat"
-        outputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}_reversed.dat"
+    for i, cut in enumerate(cuts):
+
+        if cut_name == True:
+            inputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}.dat"
+            outputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}_reversed.dat"
+        else:
+            inputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{i+1}.dat"
+            outputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{i+1}_reversed.dat"
 
         with open(inputfile, "r") as file:
             lines = file.readlines()
