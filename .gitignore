@@ -40,3 +40,6 @@ Plots/pion_production.png
 Plots/PDG-API/errors_plot.png
 cuts_fine/*
 cuts_finer/*
+cuts_mass/*
+Plots/importance_cutoff_study.png
+Plots/norm_importance_score_all_particles.png

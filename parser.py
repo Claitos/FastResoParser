@@ -153,7 +153,7 @@ def delete_particle_list_helper(particle_ids: list[int], particles_df: pd.DataFr
 
 
 
-def decay_to_pion_helper(particle_id: int) -> bool:
+def decay_to_pion_helper(particle_id: int, decays_df: pd.DataFrame) -> bool:
     """ 
     Checks if a particle decays into a pion (or antipion).
     This function assumes that the particle ID is valid and exists in the decays DataFrame.
@@ -166,7 +166,7 @@ def decay_to_pion_helper(particle_id: int) -> bool:
 
     pion_id = 211  # PDG ID for pion
 
-    if particle_id == pion_id or particle_id == -pion_id:
+    if particle_id == pion_id:
         return False  # A pion does not decay into itself
 
     decays_of_particle = decays_df[decays_df["ParentID"] == particle_id]  # Filter decays for the given particle ID
@@ -177,17 +177,20 @@ def decay_to_pion_helper(particle_id: int) -> bool:
     default = False  # Default value to return if no pion decay is found
     for _, decay in decays_of_particle.iterrows():
         # Check if the pion ID is in the decay products
-        if pion_id in decay["ProductIDs"] or -pion_id in decay["ProductIDs"]:
+        if pion_id in decay["ProductIDs"]:
             default = True
 
     return default
 
 
-def decay_to_pion_chain_helper(particle_id: int) -> bool:
+def decay_to_pion_chain_helper(particle_id: int, particles_df: pd.DataFrame, decays_df: pd.DataFrame) -> bool:
+
+    stable_particles_test = particles_df[particles_df["Width (GeV)"] == 0.0]
+    stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
 
     default = False  # Default value to return if no pion decay is found
 
-    if decay_to_pion_helper(particle_id):
+    if decay_to_pion_helper(particle_id, decays_df):
         default = True
     else:
         # Check if the particle decays into other particles that eventually decay into a pion
@@ -196,7 +199,7 @@ def decay_to_pion_chain_helper(particle_id: int) -> bool:
             for product_id in decay["ProductIDs"]:
                 if product_id in stable_particles:
                     continue
-                if decay_to_pion_chain_helper(product_id):
+                if decay_to_pion_chain_helper(product_id, particles_df, decays_df):
                     default = True
                     break
             if default:
@@ -438,6 +441,79 @@ def cutting_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test", cu
 
 
 
+
+
+
+
+
+def mass_list(particles_df: pd.DataFrame, decays_df: pd.DataFrame, number: int) -> list[int]:
+    """
+    Gets the lightest particles (up to a specified number) from the particles DataFrame.
+    
+    :param particles_df: DataFrame containing particle data.
+    :param decays_df: DataFrame containing decay channel data.
+    :param number: The number of lightest particles to return.
+    :return: List of particles ids.
+    """
+    counter = 0
+    lightest_particles = []
+
+    for _, particle in particles_df[::-1].iterrows():
+        id = particle["ID"]
+        if decay_to_pion_chain_helper(id, particles_df, decays_df):
+            counter += 1
+            #print(f"Particle ID: {id}, Mass: {particle['Mass (GeV)']}, Counter: {counter}")
+            lightest_particles.append(id)
+            if counter >= number:
+                break
+
+    return lightest_particles
+
+
+def mass_lists_routine(numbers: list[int], dir_name: str = "cuts_test") -> None:
+    """
+    Routine to resonance list of lightest particles according to the numbers list.
+
+    :param numbers: List of integers specifying how many lightest particles to get for each iteration.
+    :param dir_name: Directory name for output files.
+    :return: None
+    """
+
+    file_path = "decays_PDG2016Plus_massorder_original.dat"
+
+    particles_df, decays_df = parse_to_df(file_path)
+
+    stable_particles_test = particles_df[particles_df["Width (GeV)"] == 0.0]
+    stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
+
+    for i, number in enumerate(numbers):
+        lightest_particles = mass_list(particles_df, decays_df, number)
+        print(f"Lightest particles (decay to pion) for {number}: {lightest_particles}")
+        all_lightest_particles = lightest_particles + stable_particles  # Keep a copy of all important particles
+        all_lightest_particles_unique = list(set(all_lightest_particles))  # Remove duplicates
+
+        particles_df_cut, decays_df_cut = delete_particle_list_helper(all_lightest_particles_unique, particles_df, decays_df)
+
+        output_path = f"{dir_name}/decays_PDG2016Plus_massorder_{i+1}.dat"
+
+        parse_to_dat(output_path, particles_df_cut, decays_df_cut)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     
 def main():
 
@@ -474,7 +550,7 @@ def main():
     # counter_2 = 0
     # for particle_id in particles_df["ID"]:
     #     counter_2 += 1
-    #     if decay_to_pion_chain_helper(particle_id):
+    #     if decay_to_pion_chain_helper(particle_id, particles_df, decays_df):
     #         # print(f"Particle ID {particle_id} decays into a pion.")
     #         counter += 1
     #     else:
@@ -503,7 +579,7 @@ def main():
     # Example usage of the decay_chain_helper function
     # test_id = 331   #eta prime id = 331
     # print()
-    # decay, br = decay_chain_helper(test_id)
+    # decay, br = decay_chain_helper(test_id, decays_df)
     # print(f"Decay chain for particle ID {test_id}: {decay}")
     # print(f"Branching ratios for particle ID {test_id}: {br}")
     # paths = get_value_paths(decay)
