@@ -88,6 +88,8 @@ def get_mass_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi) -> tuple[list[float
     mass_errors_pos = [np.nan] * len(p_df)
     mass_errors_neg = [np.nan] * len(p_df)
 
+    print("\n\n\n-------------Getting mass errors by id----------------\n\n\n")
+
     for i, mcid in enumerate(p_df["ID"]):
         if np.isnan(mass_errors_pos[i]) or np.isnan(mass_errors_neg[i]):
             print(f"\nGetting mass errors for MCID {mcid}")
@@ -96,10 +98,11 @@ def get_mass_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi) -> tuple[list[float
             mass_errors_pos[i] = error_pos
             mass_errors_neg[i] = error_neg
 
+    print("\n\n\n-------------Getting mass errors by name----------------\n\n\n")
 
     for i, name in enumerate(p_df["Name"]):
         if np.isnan(mass_errors_pos[i]) or np.isnan(mass_errors_neg[i]):
-            print(f"Getting mass errors for name {name}")
+            print(f"\nGetting mass errors for name {name}")
             error_pos, error_neg = get_error_helper(name, api, property="mass", call_type="name", verbose=True)
             print(f"Got mass errors for name {name}: +{error_pos}, -{error_neg}")
             mass_errors_pos[i] = error_pos
