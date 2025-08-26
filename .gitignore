@@ -48,3 +48,5 @@ Dataframe_errors.txt
 Database/pdg-2025-v0.2.1.sqlite
 .gitignore
 Plots/importance_cutoff_study_test.png
+Datalayout/*
+cuts_study/*
