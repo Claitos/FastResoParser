@@ -45,3 +45,6 @@ Plots/importance_cutoff_study.png
 Plots/norm_importance_score_all_particles.png
 output.txt
 Dataframe_errors.txt
+Database/pdg-2025-v0.2.1.sqlite
+.gitignore
+Plots/importance_cutoff_study_test.png

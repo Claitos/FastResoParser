@@ -84,58 +84,92 @@ def get_error_helper(identifier, api: pdg.api.PdgApi, property: str = "mass", ca
 
 
 
-def get_mass_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi) -> tuple[list[float], list[float]]:
+def get_mass_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = False) -> tuple[list[float], list[float]]:
     mass_errors_pos = [np.nan] * len(p_df)
     mass_errors_neg = [np.nan] * len(p_df)
 
-    print("\n\n\n-------------Getting mass errors by id----------------\n\n\n")
+    if verbose:
+        print("\n\n\n-------------Getting mass errors by id----------------\n\n\n")
 
     for i, mcid in enumerate(p_df["ID"]):
         if np.isnan(mass_errors_pos[i]) or np.isnan(mass_errors_neg[i]):
-            print(f"\nGetting mass errors for MCID {mcid}")
-            error_pos, error_neg = get_error_helper(mcid, api, property="mass", call_type="id", verbose=True)
-            print(f"Got mass errors for MCID {mcid}: +{error_pos}, -{error_neg}")
+            if verbose:
+                print(f"\nGetting mass errors for MCID {mcid}")
+            error_pos, error_neg = get_error_helper(mcid, api, property="mass", call_type="id", verbose=verbose)
+            if verbose:
+                print(f"Got mass errors for MCID {mcid}: +{error_pos}, -{error_neg}")
             mass_errors_pos[i] = error_pos
             mass_errors_neg[i] = error_neg
 
-    print("\n\n\n-------------Getting mass errors by name----------------\n\n\n")
+    if verbose:
+        print("\n\n\n-------------Getting mass errors by name----------------\n\n\n")
 
     for i, name in enumerate(p_df["Name"]):
         if np.isnan(mass_errors_pos[i]) or np.isnan(mass_errors_neg[i]):
-            print(f"\nGetting mass errors for name {name}")
-            error_pos, error_neg = get_error_helper(name, api, property="mass", call_type="name", verbose=True)
-            print(f"Got mass errors for name {name}: +{error_pos}, -{error_neg}")
+            if verbose:
+                print(f"\nGetting mass errors for name {name}")
+            error_pos, error_neg = get_error_helper(name, api, property="mass", call_type="name", verbose=verbose)
+            if verbose:
+                print(f"Got mass errors for name {name}: +{error_pos}, -{error_neg}")
             mass_errors_pos[i] = error_pos
             mass_errors_neg[i] = error_neg
 
     return mass_errors_pos, mass_errors_neg
 
 
-def get_width_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi) -> tuple[list[float], list[float]]:
+def get_width_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = False) -> tuple[list[float], list[float]]:
     width_errors_pos = [np.nan] * len(p_df)
     width_errors_neg = [np.nan] * len(p_df)
 
-    for i, mcid in enumerate(p_df["ID"]):
-        if np.isnan(width_errors_pos[i]) or np.isnan(width_errors_neg[i]):
-            error_pos, error_neg = get_error_helper(mcid, api, property="width", call_type="id")
-            width_errors_pos[i] = error_pos
-            width_errors_neg[i] = error_neg
-
-    for i, name in enumerate(p_df["Name"]):
-        if np.isnan(width_errors_pos[i]) or np.isnan(width_errors_neg[i]):
-            error_pos, error_neg = get_error_helper(name, api, property="width", call_type="name")
-            width_errors_pos[i] = error_pos
-            width_errors_neg[i] = error_neg
+    if verbose:
+        print("\n\n\n-------------Getting width errors by id----------------\n\n\n")
 
     for i, mcid in enumerate(p_df["ID"]):
         if np.isnan(width_errors_pos[i]) or np.isnan(width_errors_neg[i]):
-            error_pos, error_neg = get_error_helper(mcid, api, property="lifetime", call_type="id")
+            if verbose:
+                print(f"\nGetting width errors for MCID {mcid}")
+            error_pos, error_neg = get_error_helper(mcid, api, property="width", call_type="id", verbose=verbose)
+            if verbose:
+                print(f"Got width errors for MCID {mcid}: +{error_pos}, -{error_neg}")
             width_errors_pos[i] = error_pos
             width_errors_neg[i] = error_neg
 
+    if verbose:
+        print("\n\n\n-------------Getting width errors by name----------------\n\n\n")
+
     for i, name in enumerate(p_df["Name"]):
         if np.isnan(width_errors_pos[i]) or np.isnan(width_errors_neg[i]):
-            error_pos, error_neg = get_error_helper(name, api, property="lifetime", call_type="name")
+            if verbose:
+                print(f"\nGetting width errors for name {name}")
+            error_pos, error_neg = get_error_helper(name, api, property="width", call_type="name", verbose=verbose)
+            if verbose:
+                print(f"Got width errors for name {name}: +{error_pos}, -{error_neg}")
+            width_errors_pos[i] = error_pos
+            width_errors_neg[i] = error_neg
+
+    if verbose:
+        print("\n\n\n-------------Getting lifetime errors by id----------------\n\n\n")
+
+    for i, mcid in enumerate(p_df["ID"]):
+        if np.isnan(width_errors_pos[i]) or np.isnan(width_errors_neg[i]):
+            if verbose:
+                print(f"\nGetting lifetime errors for MCID {mcid}")
+            error_pos, error_neg = get_error_helper(mcid, api, property="lifetime", call_type="id", verbose=verbose)
+            if verbose:
+                print(f"Got lifetime errors for MCID {mcid}: +{error_pos}, -{error_neg}")
+            width_errors_pos[i] = error_pos
+            width_errors_neg[i] = error_neg
+
+    if verbose:
+        print("\n\n\n-------------Getting lifetime errors by name----------------\n\n\n")
+
+    for i, name in enumerate(p_df["Name"]):
+        if np.isnan(width_errors_pos[i]) or np.isnan(width_errors_neg[i]):
+            if verbose:
+                print(f"\nGetting lifetime errors for name {name}")
+            error_pos, error_neg = get_error_helper(name, api, property="lifetime", call_type="name", verbose=verbose)
+            if verbose:
+                print(f"Got lifetime errors for name {name}: +{error_pos}, -{error_neg}")
             width_errors_pos[i] = error_pos
             width_errors_neg[i] = error_neg
 
@@ -254,8 +288,8 @@ def get_particle_errors(p_df: pd.DataFrame, api: pdg.api.PdgApi) -> pd.DataFrame
     Returns:
         pd.DataFrame: The DataFrame with mass and width errors added.
     """
-    mass_errors_pos, mass_errors_neg = get_mass_errors(p_df, api)
-    width_errors_pos, width_errors_neg = get_width_errors(p_df, api)
+    mass_errors_pos, mass_errors_neg = get_mass_errors(p_df, api, verbose=True)
+    width_errors_pos, width_errors_neg = get_width_errors(p_df, api, verbose=True)
 
     mass_errors_pos = replace_nan_none(mass_errors_pos)
     mass_errors_neg = replace_nan_none(mass_errors_neg)
