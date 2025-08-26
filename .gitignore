@@ -43,3 +43,5 @@ cuts_finer/*
 cuts_mass/*
 Plots/importance_cutoff_study.png
 Plots/norm_importance_score_all_particles.png
+output.txt
+Dataframe_errors.txt
