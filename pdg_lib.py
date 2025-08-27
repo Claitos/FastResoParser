@@ -1,6 +1,52 @@
 import pandas as pd
 import numpy as np
 import pdg
+import re
+
+
+
+
+#################################################################
+#
+#
+#           Functions to extract mass and width errors of particles
+#
+#
+#################################################################
+
+
+
+
+
+def get_values_text(summary_value, verbose: bool = False):
+    unit_dict = {"MeV": 1e-3}
+    text = summary_value.value_text
+    unit = summary_value.units
+
+    text_numbers = re.findall(r"\d+", text)
+    numbers_converted = [float(num) * unit_dict[unit] for num in text_numbers]
+
+    if len(text_numbers) == 0:
+        if verbose:
+            print("No valid numbers found.")
+        return np.nan, np.nan
+    
+    if len(text_numbers) == 2:
+        error_pos = (numbers_converted[1] - numbers_converted[0]) / 2
+        error_neg = (numbers_converted[1] - numbers_converted[0]) / 2
+        if verbose:
+            print(f"text_error positive: {round(error_pos, 10)}, text_error negative: {round(error_neg, 10)}")
+        return round(error_pos, 10), round(error_neg, 10)
+
+    if len(text_numbers) == 3:
+        error_pos = numbers_converted[2] - numbers_converted[1]
+        error_neg = numbers_converted[1] - numbers_converted[0]
+        if verbose:
+            print(f"text_error positive: {round(error_pos, 10)}, text_error negative: {round(error_neg, 10)}")
+        return round(error_pos, 10), round(error_neg, 10)
+
+    return np.nan, np.nan
+
 
 
 
@@ -56,6 +102,9 @@ def get_error_helper(identifier, api: pdg.api.PdgApi, property: str = "mass", ca
                 except:
                     if verbose:
                         print(f"Error retrieval failed for property: {property} of particle: {identifier}")
+                        print(f"Value text: {summary_value.value_text} {summary_value.units}     display: {summary_value.display_value_text}")
+                        if property == "width":
+                            error_pos, error_neg = get_values_text(summary_value, verbose=verbose)
                     continue
 
             elif property == "lifetime":
@@ -68,6 +117,7 @@ def get_error_helper(identifier, api: pdg.api.PdgApi, property: str = "mass", ca
                 except:
                     if verbose:
                         print(f"Error retrieval failed for property: {property} of particle: {identifier}")
+                        print(f"Value text: {summary_value.value_text} {summary_value.units}     display: {summary_value.display_value_text}")
                     continue
                 error_pos = (hbar / (tau_value**2)) * tau_error_pos
                 error_neg = (hbar / (tau_value**2)) * tau_error_neg
@@ -322,6 +372,13 @@ def get_particle_errors(p_df: pd.DataFrame, api: pdg.api.PdgApi) -> pd.DataFrame
 
 
 
+#################################################################
+#
+#
+#           Functions to extract branching ratio errors of the decay modes on particles
+#
+#
+#################################################################
 
 
 
@@ -414,12 +471,13 @@ def get_particle_errors(p_df: pd.DataFrame, api: pdg.api.PdgApi) -> pd.DataFrame
 
 
 
-
-
-
-
-
-
+#################################################################
+#
+#
+#           Old and deprecated functions for error extraction
+#
+#
+#################################################################
 
 def get_mass_errors_deprecated(p_df :pd.DataFrame, api: pdg.api.PdgApi) -> tuple[list[float], list[float]]:
     unit = "GeV"
