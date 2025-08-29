@@ -138,6 +138,8 @@ def get_mass_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = Fal
     mass_errors_pos = [np.nan] * len(p_df)
     mass_errors_neg = [np.nan] * len(p_df)
 
+    formatted_names = format_names(p_df, verbose=verbose)
+
     if verbose:
         print("\n\n\n-------------Getting mass errors by id----------------\n\n\n")
 
@@ -154,7 +156,7 @@ def get_mass_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = Fal
     if verbose:
         print("\n\n\n-------------Getting mass errors by name----------------\n\n\n")
 
-    for i, name in enumerate(p_df["Name"]):
+    for i, name in enumerate(formatted_names):
         if np.isnan(mass_errors_pos[i]) or np.isnan(mass_errors_neg[i]):
             if verbose:
                 print(f"\nGetting mass errors for name {name}")
@@ -170,6 +172,8 @@ def get_mass_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = Fal
 def get_width_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = False) -> tuple[list[float], list[float]]:
     width_errors_pos = [np.nan] * len(p_df)
     width_errors_neg = [np.nan] * len(p_df)
+
+    formatted_names = format_names(p_df, verbose=False)
 
     if verbose:
         print("\n\n\n-------------Getting width errors by id----------------\n\n\n")
@@ -187,7 +191,7 @@ def get_width_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = Fa
     if verbose:
         print("\n\n\n-------------Getting width errors by name----------------\n\n\n")
 
-    for i, name in enumerate(p_df["Name"]):
+    for i, name in enumerate(formatted_names):
         if np.isnan(width_errors_pos[i]) or np.isnan(width_errors_neg[i]):
             if verbose:
                 print(f"\nGetting width errors for name {name}")
@@ -213,7 +217,7 @@ def get_width_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = Fa
     if verbose:
         print("\n\n\n-------------Getting lifetime errors by name----------------\n\n\n")
 
-    for i, name in enumerate(p_df["Name"]):
+    for i, name in enumerate(formatted_names):
         if np.isnan(width_errors_pos[i]) or np.isnan(width_errors_neg[i]):
             if verbose:
                 print(f"\nGetting lifetime errors for name {name}")
@@ -306,7 +310,7 @@ def post_process(p_df: pd.DataFrame) -> pd.DataFrame:
     return p_df
 
 
-def format_names(p_df: pd.DataFrame) -> list[str]:
+def format_names(p_df: pd.DataFrame, verbose: bool = False) -> list[str]:
     """
     Format the names of the particles in the DataFrame.
 
@@ -316,12 +320,44 @@ def format_names(p_df: pd.DataFrame) -> list[str]:
     Returns:
         list[str]: A list of formatted particle names.
     """
+
+    lookup_dict = {
+        "Ksi": "Xi",
+        "rho3": "rho_3",
+        "rho5": "rho_5",
+        "eta2": "eta_2",
+        "f0": "f_0",
+        "f1": "f_1",
+        "f2": "f_2",
+        "f4": "f_4",
+        "f6": "f_6",
+        "a0": "a_0",
+        "a1": "a_1",
+        "a2": "a_2",
+        "a4": "a_4",
+        "h1": "h_1",
+        "pi1": "pi_1",
+        "pi2": "pi_2",
+        "K0": "K_0",
+        "K1": "K_1",
+        "K2": "K_2",
+        "K3": "K_3",
+        "K4": "K_4",
+        "K5": "K_5"
+    }
+
     formatted_names = []
     for _, particle in p_df.iterrows():
         name = particle["Name"]
         #print(type(name))  ->  str
-        formatted_name = f"{name}"
-        formatted_names.append(formatted_name)
+        for key, value in lookup_dict.items():
+            name = name.replace(key, value)
+        formatted_names.append(name)
+
+    if verbose:
+        print(f"Formatted particle names: {formatted_names}")
+        print(f"Number of formatted names: {len(formatted_names)}")
+
     return formatted_names
 
 
