@@ -322,6 +322,9 @@ def format_names(p_df: pd.DataFrame, verbose: bool = False) -> list[str]:
     """
 
     lookup_dict = {
+        "pi2(1880)+": "pi_2(1880)0",
+        "Omega(2250)": "Omega(2250)-",
+        "Lambda(2350)": "Lambda(2350)0",
         "Ksi": "Xi",
         "rho3": "rho_3",
         "rho5": "rho_5",
@@ -338,8 +341,10 @@ def format_names(p_df: pd.DataFrame, verbose: bool = False) -> list[str]:
         "h1": "h_1",
         "pi1": "pi_1",
         "pi2": "pi_2",
+        "K0*": "K_0^*",
         "K0": "K_0",
         "K1": "K_1",
+        "K2*": "K_2^*",
         "K2": "K_2",
         "K3": "K_3",
         "K4": "K_4",
@@ -356,7 +361,7 @@ def format_names(p_df: pd.DataFrame, verbose: bool = False) -> list[str]:
 
     if verbose:
         print(f"Formatted particle names: {formatted_names}")
-        print(f"Number of formatted names: {len(formatted_names)}")
+        print(f"Number of formatted names: {len(formatted_names)} \n")
 
     return formatted_names
 
@@ -393,6 +398,11 @@ def get_particle_errors(p_df: pd.DataFrame, api: pdg.api.PdgApi) -> pd.DataFrame
     # Post-process the DataFrame
     p_df_errors = post_process(p_df_errors)
 
+    correction_factor = 0.5
+    p_df_errors = bad_evidence_correction(p_df_errors, api, correction_factor=correction_factor, all=True, verbose=True)
+
+    p_df_errors = post_process(p_df_errors)
+
     return p_df_errors
 
 
@@ -400,10 +410,114 @@ def get_particle_errors(p_df: pd.DataFrame, api: pdg.api.PdgApi) -> pd.DataFrame
 
 
 
+def bad_evidence_helper(id:str, name:str, api: pdg.api.PdgApi, property: str = "mass", verbose: bool = False) -> bool:
+
+    try:
+        particle = api.get_particle_by_mcid(id)
+    except:
+        try: 
+            particle = api.get_particle_by_name(name)
+        except:
+            if verbose:
+                print(f"Particle not found for ID: {id} and Name: {name}")
+            return False
+
+
+    if property == "mass":
+        property_infos = list(particle.masses(require_summary_data=False))
+    elif property == "width":
+        property_infos = list(particle.widths(require_summary_data=False))
+    else:
+        raise ValueError(f"Unknown property: {property}")
+
+    if not property_infos:
+        if verbose:
+            print(f"No property information found for particle: {id} / {name}")
+        return True
+
+    if verbose:
+        print(f"len of property_infos: {len(property_infos)}")
+
+
+    default_return = False
+
+    for info in property_infos:
+        if not info.has_best_summary():
+            default_return = True
+
+    return default_return
 
 
 
+def bad_evidence_correction(p_df: pd.DataFrame, api: pdg.api.PdgApi, correction_factor: float = 1.0, all: bool = False, verbose: bool = False) -> pd.DataFrame:
+    """
+    Apply bad evidence correction to the particle DataFrame.
 
+    Parameters:
+        p_df (pd.DataFrame): The input particle DataFrame.
+        api (pdg.api.PdgApi): The PDG API instance.
+
+    Returns:
+        pd.DataFrame: The DataFrame with bad evidence correction applied.
+    """
+
+    formatted_names = format_names(p_df, verbose=verbose)
+    counter_mass = 0
+    counter_width = 0
+    stable_particles_test = p_df[p_df["Width (GeV)"] == 0.0]
+    stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
+
+    for i, particle in p_df.iterrows():
+
+        id = particle["ID"]
+        name = formatted_names[i]
+        mass = particle["Mass (GeV)"]
+        width = particle["Width (GeV)"]
+        mass_err_p = particle["Mass Error Pos (GeV)"]
+        mass_err_n = particle["Mass Error Neg (GeV)"]
+        width_err_p = particle["Width Error Pos (GeV)"]
+        width_err_n = particle["Width Error Neg (GeV)"]
+
+        if id in stable_particles:
+            continue
+
+        if mass_err_p == 0.0 and mass_err_n == 0.0:
+            if verbose:
+                print(f"\n Processing particle for mass: {name} / {id}")
+
+            has_bad_evidence = bad_evidence_helper(id, name, api, property="mass", verbose=verbose)
+
+            if all:
+                has_bad_evidence = True
+
+            if has_bad_evidence:
+                counter_mass += 1
+                if verbose:
+                    print(f"Applying bad evidence correction for mass of particle {name}")
+                p_df.loc[p_df["ID"] == id, "Mass Error Pos (GeV)"] = correction_factor * mass
+                p_df.loc[p_df["ID"] == id, "Mass Error Neg (GeV)"] = correction_factor * mass
+
+
+        if width_err_p == 0.0 and width_err_n == 0.0:
+            if verbose:
+                print(f"Processing particle for width: {name} / {id}")
+
+            has_bad_evidence = bad_evidence_helper(id, name, api, property="width", verbose=verbose)
+
+            if all:
+                has_bad_evidence = True
+
+            if has_bad_evidence:
+                counter_width += 1
+                if verbose:
+                    print(f"Applying bad evidence correction for width of particle {name}")
+                p_df.loc[p_df["ID"] == id, "Width Error Pos (GeV)"] = correction_factor * width
+                p_df.loc[p_df["ID"] == id, "Width Error Neg (GeV)"] = correction_factor * width
+
+    if verbose:
+        print(f"Bad evidence correction applied to {counter_mass} particles (mass) and {counter_width} particles (width) \n")
+
+    return p_df
 
 
 

@@ -50,3 +50,4 @@ Database/pdg-2025-v0.2.1.sqlite
 Plots/importance_cutoff_study_test.png
 Datalayout/*
 cuts_study/*
+Plots/PDG-API/errors_plot_all.png
