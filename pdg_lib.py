@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import pdg
 import re
+from collections import Counter
 
 
 
@@ -86,14 +87,14 @@ def get_error_helper(identifier, api: pdg.api.PdgApi, property: str = "mass", ca
 
     error_pos, error_neg = None, None
 
-    for info in property_infos:
+    for info in property_infos[::-1]:   # Reverse order to end on the possible best info
         summary_values = info.summary_values(summary_table_only=False)
         if not summary_values:
             continue
         if verbose:
             print(f"len of summary values: {len(summary_values)}")
 
-        for summary_value in summary_values:
+        for summary_value in summary_values[::-1]:   # Reverse order to end on the possible best value
             if property == "mass" or property == "width":
                 unit = "GeV"
                 try:
@@ -245,16 +246,17 @@ def replace_nan_none(input_list: list[float], default_value=0.0) -> list[float]:
     Returns:
         list: A new list with None and np.nan replaced by default_value.
     """
-    counter_None = 0
-    counter_nan = 0
-    for i in range(len(input_list)):
-        if np.isnan(input_list[i]):
-            counter_nan += 1
-        if input_list[i] is None:
-            counter_None += 1
+    # counter_None = 0
+    # counter_nan = 0
+    # for i in range(len(input_list)):
+    #     #print(f"input_list[{i}] = {input_list[i]}")
+    #     if np.isnan(input_list[i]):
+    #         counter_nan += 1
+    #     if input_list[i] is None:
+    #         counter_None += 1
     
-    #print(f"Replaced {counter_None} None values with {default_value}.")
-    print(f"Replaced {counter_nan} np.nan values with {default_value}.")
+    # #print(f"Replaced {counter_None} None values with {default_value}.")
+    # print(f"Replaced {counter_nan} np.nan values with {default_value}.")
 
     return [default_value if x is None or np.isnan(x) else x for x in input_list]
 
@@ -304,7 +306,7 @@ def post_process(p_df: pd.DataFrame) -> pd.DataFrame:
         if w_err_n_anti == 0.0:
             p_df.loc[p_df["ID"] == -id, "Width Error Neg (GeV)"] = w_err_n
 
-    print("Processed anti-particle mass errors:", counter_mass)
+    print("\nProcessed anti-particle mass errors:", counter_mass)
     print("Processed anti-particle width errors:", counter_width)
 
     return p_df
@@ -367,7 +369,7 @@ def format_names(p_df: pd.DataFrame, verbose: bool = False) -> list[str]:
 
 
 
-def get_particle_errors(p_df: pd.DataFrame, api: pdg.api.PdgApi) -> pd.DataFrame:
+def get_particle_errors(p_df: pd.DataFrame, api: pdg.api.PdgApi, apply_corrections: bool = False) -> pd.DataFrame:
     """
     Get mass and width errors for particles in the DataFrame.
     Do post-processing on the DataFrame to handle particles and antiparticles and handle None and NaN values.
@@ -398,10 +400,11 @@ def get_particle_errors(p_df: pd.DataFrame, api: pdg.api.PdgApi) -> pd.DataFrame
     # Post-process the DataFrame
     p_df_errors = post_process(p_df_errors)
 
-    correction_factor = 0.5
-    p_df_errors = bad_evidence_correction(p_df_errors, api, correction_factor=correction_factor, all=True, verbose=True)
+    if apply_corrections:
+        correction_factor = 0.5
+        p_df_errors = bad_evidence_correction(p_df_errors, api, correction_factor=correction_factor, all=True, verbose=True)
 
-    p_df_errors = post_process(p_df_errors)
+        p_df_errors = post_process(p_df_errors)
 
     return p_df_errors
 
@@ -531,6 +534,100 @@ def bad_evidence_correction(p_df: pd.DataFrame, api: pdg.api.PdgApi, correction_
 #################################################################
 
 
+def get_br_errors_helper(identifier, products: list[int], api: pdg.api.PdgApi, call_type="id", verbose: bool = False) -> tuple[list[float], list[float]]:
+
+    try:
+        if call_type == "id":
+            particle = api.get_particle_by_mcid(identifier)
+        elif call_type == "name":
+            particle = api.get_particle_by_name(identifier)
+        else:
+            raise ValueError(f"Unknown call_type: {call_type}")
+    except:
+        if verbose:
+            print(f"Particle not found for identifier: {identifier} with call_type: {call_type}")
+        return np.nan, np.nan
+
+
+    err_pos, err_neg = np.nan, np.nan
+
+    for bf in particle.branching_fractions():
+        
+        product_list = []
+        for product in bf.decay_products:
+            #print(product)
+            item = product.item
+            multi = product.multiplier
+            if product.subdecay is None and item.has_particle:
+                mcid_prod = item.particle.mcid
+                for _ in range(multi):
+                    product_list.append(mcid_prod)
+
+
+        summary_values = bf.summary_values()
+        
+        if verbose:
+            print('\n%-60s    %s' % (bf.description, bf.value_text))
+            print(f"retrieved product_list: {product_list}")
+            print(f"length of summary values: {len(summary_values)}")
+
+        for sv in summary_values[::1]:
+            if Counter(products) == Counter(product_list):
+                print(f"Match found for {identifier} decay: {products}")
+                err_pos = sv.error_positive
+                err_neg = sv.error_negative
+            else:
+                continue
+
+        # if err_neg is None and err_pos is None:
+        #     return np.nan, np.nan
+
+        #print(f"Retrieved error values: {err_pos} {err_neg}")
+
+    return err_pos, err_neg
+
+
+
+
+
+
+def get_br_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = False) -> tuple[list[float], list[float]]:
+    br_errors_pos = [np.nan] * len(d_df)
+    br_errors_neg = [np.nan] * len(d_df)
+
+    #formatted_names = format_names(p_df, verbose=verbose)
+
+    if verbose:
+        print("\n\n\n-------------Getting branching ratio errors by id----------------\n\n\n")
+
+    for i, decay in d_df.iterrows():
+        if np.isnan(br_errors_pos[i]) or np.isnan(br_errors_neg[i]):
+            mcid = int(decay["ParentID"])
+            products = decay["ProductIDs"]
+            products = [x for x in products if x != 0]
+            if verbose:
+                print(f"\nGetting branching ratio errors for MCID {mcid}")
+                print(decay)
+            error_pos, error_neg = get_br_errors_helper(mcid, products, api, call_type="id", verbose=verbose)
+            if verbose:
+                print(f"Got branching ratio errors for MCID {mcid}: +{error_pos}, -{error_neg}")
+            br_errors_pos[i] = error_pos
+            br_errors_neg[i] = error_neg
+
+    # if verbose:
+    #     print("\n\n\n-------------Getting branching ratio errors by name----------------\n\n\n")
+
+    # for i, name in enumerate(formatted_names):
+    #     if np.isnan(br_errors_pos[i]) or np.isnan(br_errors_neg[i]):
+    #         if verbose:
+    #             print(f"\nGetting branching ratio errors for name {name}")
+    #         error_pos, error_neg = get_br_errors_helper(name, api, property="mass", call_type="name", verbose=verbose)
+    #         if verbose:
+    #             print(f"Got branching ratio errors for name {name}: +{error_pos}, -{error_neg}")
+    #         br_errors_pos[i] = error_pos
+    #         br_errors_neg[i] = error_neg
+
+    return br_errors_pos, br_errors_neg
 
 
 
@@ -539,9 +636,30 @@ def bad_evidence_correction(p_df: pd.DataFrame, api: pdg.api.PdgApi, correction_
 
 
 
+def get_decay_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi) -> pd.DataFrame:
+    """
+    Get branching ratio errors for decay modes in the decay DataFrame.
+    Do post-processing on the DataFrame to handle particles and antiparticles and handle None and NaN values.
 
+    Parameters:
+        p_df (pd.DataFrame): The input particle DataFrame.
+        d_df (pd.DataFrame): The input decay DataFrame.
+        api (pdg.api.PdgApi): The PDG API instance.
 
+    Returns:
+        pd.DataFrame: The decay DataFrame with branching ratio errors added.
+    """
 
+    br_errors_pos, br_errors_neg = get_br_errors(p_df, d_df, api, verbose=True)
+
+    br_errors_pos = replace_nan_none(br_errors_pos)
+    br_errors_neg = replace_nan_none(br_errors_neg)
+
+    d_df_errors = d_df.copy()
+    d_df_errors["BR Error Pos"] = br_errors_pos
+    d_df_errors["BR Error Neg"] = br_errors_neg
+
+    return d_df_errors
 
 
 
