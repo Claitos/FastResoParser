@@ -3,6 +3,7 @@ import numpy as np
 import pdg
 import re
 from collections import Counter
+from pathlib import Path
 
 
 
@@ -534,7 +535,76 @@ def bad_evidence_correction(p_df: pd.DataFrame, api: pdg.api.PdgApi, correction_
 #################################################################
 
 
-def get_br_errors_helper(identifier, products_ids: list[int], products_names: list[str], api: pdg.api.PdgApi, call_type="id", verbose: bool = False) -> tuple[list[float], list[float]]:
+
+
+def get_product_lists_helper(branching_fraction: pdg.decay.PdgBranchingFraction, verbose: bool = False) -> tuple[list[int], list[str]]: 
+    product_list = []
+    product_list_names = []
+    for product in branching_fraction.decay_products:
+        #print(product)
+        item = product.item
+        multi = product.multiplier
+        if product.subdecay is None and item.has_particle:
+            mcid_prod = item.particle.mcid
+            name_prod = item.particle.name  
+            for _ in range(multi):
+                product_list.append(mcid_prod)
+                product_list_names.append(name_prod)
+        else:
+            # if verbose:
+            #     print(f"Decay item has no particle or the product is a subdecay")
+            name_prod = item.name       # access name directly from item if no particle available
+            for _ in range(multi):
+                product_list_names.append(name_prod)
+
+    return product_list, product_list_names
+
+
+
+
+def get_br_text_helper(branching_fraction: pdg.decay.PdgBranchingFraction, verbose: bool = False) -> tuple[float, float]: 
+    text = branching_fraction.value_text
+    unit = branching_fraction.units
+
+    text_numbers = re.findall(r"\d*\.\d+|\d+", text)
+    numbers_converted = [float(num) for num in text_numbers]
+
+    error_pos, error_neg = np.nan, np.nan
+
+    if verbose:
+        print(f"Extracted numbers: {text_numbers}, converted: {numbers_converted}")
+
+    if len(text_numbers) == 0:
+        if verbose:
+            print("No valid numbers found.")
+        return np.nan, np.nan
+    
+    if len(text_numbers) == 2:
+        if "to" in text or "TO" in text:
+            error_pos = (numbers_converted[1] - numbers_converted[0]) / 2
+            error_neg = (numbers_converted[1] - numbers_converted[0]) / 2
+        if verbose:
+            print(f"text2_error positive: {round(error_pos, 10)}, text2_error negative: {round(error_neg, 10)}")
+        return round(error_pos, 10), round(error_neg, 10)
+
+    if len(text_numbers) == 3:
+        if "E" in text or "e" in text:
+            diff = (numbers_converted[1] - numbers_converted[0]) / 2
+            error_pos = diff * 10 ** (-numbers_converted[2])
+            error_neg = diff * 10 ** (-numbers_converted[2])
+        if "to" in text or "TO" in text:
+            error_pos = numbers_converted[2] - numbers_converted[1]
+            error_neg = numbers_converted[1] - numbers_converted[0]
+        if verbose:
+            print(f"text3_error positive: {round(error_pos, 10)}, text3_error negative: {round(error_neg, 10)}")
+        return round(error_pos, 10), round(error_neg, 10)
+
+    return np.nan, np.nan
+
+
+
+
+def get_br_errors_helper(identifier, products_ids: list[int], products_names: list[list[str]], api: pdg.api.PdgApi, call_type="id", verbose: bool = False) -> tuple[float, float]:
 
     try:
         if call_type == "id":
@@ -546,47 +616,33 @@ def get_br_errors_helper(identifier, products_ids: list[int], products_names: li
     except:
         if verbose:
             print(f"Particle not found for identifier: {identifier} with call_type: {call_type}")
+            if call_type == "name":
+                debug_file("part_found.txt", f"Particle not found for identifier: {identifier} with call_type: {call_type}\n")
         return np.nan, np.nan
 
 
     err_pos, err_neg = np.nan, np.nan
 
     for bf in particle.branching_fractions():
-        
-        product_list = []
-        product_list_names = []
-        for product in bf.decay_products:
-            #print(product)
-            item = product.item
-            multi = product.multiplier
-            if product.subdecay is None and item.has_particle:
-                mcid_prod = item.particle.mcid
-                name_prod = item.particle.name  
-                for _ in range(multi):
-                    product_list.append(mcid_prod)
-                    product_list_names.append(name_prod)
-            else:
-                # if verbose:
-                #     print(f"Decay item has no particle or the product is a subdecay")
-                name_prod = item.name       # access name directly from item if no particle available
-                for _ in range(multi):
-                    product_list_names.append(name_prod)
 
+        product_list, product_list_names = get_product_lists_helper(bf, verbose=verbose)
 
         summary_values = bf.summary_values()
         
         if verbose:
             print('\n%-60s    %s' % (bf.description, bf.value_text))
+            # print(bf.units)
             print(f"retrieved product_list: {product_list} or  {product_list_names}")
             print(f"length of summary values: {len(summary_values)}")
+            debug_file("products.txt", str(product_list) + "  :  " + str(product_list_names) + "\n")
 
-        for sv in summary_values[::1]:
+        for sv in summary_values[::-1]:
             if Counter(products_ids) == Counter(product_list):
                 print(f"Match found for {identifier} decay: {products_ids}")
                 err_pos = sv.error_positive
                 err_neg = sv.error_negative
-            elif Counter(products_names) == Counter(product_list_names):           
-                print(f"Match found for {identifier} decay: {products_names}")
+            elif product_checker(products_names, product_list_names):           
+                print(f"Match found for {identifier} decay (names): {products_names}")
                 err_pos = sv.error_positive 
                 err_neg = sv.error_negative
             else:
@@ -594,8 +650,8 @@ def get_br_errors_helper(identifier, products_ids: list[int], products_names: li
 
         if err_neg is None and err_pos is None:     # probably because the decay is just "seen" -> should have large errors but still need to check this
             if verbose:
-                print(f"No errors could be retrieved, BR could be 'seen'. Setting to NaN. Handle later.")
-            err_pos, err_neg = np.nan, np.nan
+                print(f"No errors could be retrieved, try handling via text. Else nan")
+            err_pos, err_neg = get_br_text_helper(bf, verbose=verbose)
 
     return err_pos, err_neg
 
@@ -609,6 +665,7 @@ def get_br_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, v
     br_errors_neg = [np.nan] * len(d_df)
 
     formatted_names_dict = formatted_names(p_df, verbose=verbose)
+    formatted_products_dict = formatted_product_names(p_df, verbose=verbose)
 
     if verbose:
         print("\n\n\n-------------Getting branching ratio errors by id----------------\n\n\n")
@@ -618,7 +675,7 @@ def get_br_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, v
             mcid = int(decay["ParentID"])
             products = decay["ProductIDs"]
             products_ids = [x for x in products if x != 0]             # no dict of ints and strsbecause of possible duplicates which are deleted by dict
-            products_names = [formatted_names_dict[x] for x in products_ids]
+            products_names = [formatted_products_dict[x] for x in products_ids]
             if verbose:
                 print(f"\nGetting branching ratio errors for MCID {mcid} with products {products_ids} or names {products_names}")
                 print(decay)
@@ -637,7 +694,7 @@ def get_br_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, v
             name = formatted_names_dict[mcid]
             products = decay["ProductIDs"]
             products_ids = [x for x in products if x != 0]
-            products_names = [formatted_names_dict[x] for x in products_ids]
+            products_names = [formatted_products_dict[x] for x in products_ids]
             if verbose:
                 print(f"\nGetting branching ratio errors for name {name} with products {products_ids} or names {products_names}")
                 print(decay)
@@ -678,6 +735,11 @@ def get_decay_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi
     Returns:
         pd.DataFrame: The decay DataFrame with branching ratio errors added.
     """
+
+    logfolder = Path.cwd() / "logs"          # clear log folder of old files
+    files_to_delete = ["part_found.txt", "products.txt"]
+    for file in files_to_delete:
+        (logfolder / file).unlink()
 
     br_errors_pos, br_errors_neg = get_br_errors(p_df, d_df, api, verbose=True)
 
@@ -737,6 +799,17 @@ def formatted_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, str]
         "K3": "K_3",
         "K4": "K_4",
         "K5": "K_5"
+        # "Anti-Delta": "Deltabar",
+        # "Anti-Sigma": "Sigmabar",
+        # "Anti-Xi": "Xibar",
+        # "Anti-Omega": "Omegabar"
+        # "Anti-Proton": "pbar",
+        # "Anti-Neutron": "nbar"
+        # "Anti-Lambda": "Lambdabar"
+        # "Anti-K0": "K0bar",
+        # "Anti-K0*": "K0bar*"
+        # "Anti-K+": "K-",
+        # "Anti-K-": "K+"
     }
 
     formatted_names = {}
@@ -758,17 +831,128 @@ def formatted_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, str]
 
 
 
+def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, list[str]]:
+    """
+    Format the names of the particles in the DataFrame.
+
+    Parameters:
+        p_df (pd.DataFrame): The input particle DataFrame.
+
+    Returns:
+        formatted_names_dict (dict[int, list[str]]): A dictionary mapping particle IDs to formatted names.
+    """
+
+    lookup_dict = {
+        "pi2(1880)+": "pi_2(1880)0",
+        "Omega(2250)": "Omega(2250)-",
+        "Lambda(2350)": "Lambda(2350)0",
+        "Ksi": "Xi",
+        "rho3": "rho_3",
+        "rho5": "rho_5",
+        "eta2": "eta_2",
+        "f0": "f_0",
+        "f1": "f_1",
+        "f2": "f_2",
+        "f4": "f_4",
+        "f6": "f_6",
+        "a0": "a_0",
+        "a1": "a_1",
+        "a2": "a_2",
+        "a4": "a_4",
+        "h1": "h_1",
+        "pi1": "pi_1",
+        "pi2": "pi_2",
+        "K0": "K_0",
+        "K1": "K_1",
+        "K2": "K_2",
+        "K3": "K_3",
+        "K4": "K_4",
+        "K5": "K_5"
+    }
+
+    def list_appender_helper(lst, item):
+        lst.append(item)
+        lst.append(item.lower())
+        lst.append(item.capitalize())
+        if item.endswith("++") or item.endswith("--"):
+            lst.append(item[:-2])   # remove charge at the end
+        elif item.endswith("0") or item.endswith("+") or item.endswith("-"):
+            lst.append(item[:-1])   # remove charge at the end
+        return lst
+
+    formatted_names_dict = {}
+    for _, particle in p_df.iterrows():
+        names_form = []
+        name = particle["Name"]
+        id = particle["ID"]
+        #print(type(name))  ->  str
+        for key, value in lookup_dict.items():
+            name = name.replace(key, value)
+
+        names_form = list_appender_helper(names_form, name)
+
+        if "Anti-" in name:
+            name_anti = name.replace("Anti-", "")
+            if name_anti.endswith("+") or name_anti.endswith("++"):
+                name_anti = name_anti.replace("+", "-")
+            elif name_anti.endswith("-") or name_anti.endswith("--"):
+                name_anti = name_anti.replace("-", "+")
+            names_form = list_appender_helper(names_form, name_anti)
+
+        if "*" in name:
+            name_star = name.replace("*", "^*")
+            names_form = list_appender_helper(names_form, name_star)
+        
+        if "Anti-K" in name:
+            name_k = name.replace("Anti-K", "Kbar")
+            names_form = list_appender_helper(names_form, name_k)
+
+        if name == "Anti-p":
+            name_p = name.replace("Anti-p", "pbar")
+            names_form = list_appender_helper(names_form, name_p)
+
+        if name == "n" or name == "p" or name == "Anti-n" or name == "Anti-p":
+            names_form.append("N")
+            names_form.append("Nbar")
+
+
+        if verbose:
+            print(f"Formatted product names for {id}: {names_form}")
+            print(f"Number of formatted names: {len(names_form)} \n")
+
+        formatted_names_dict[id] = names_form
+
+
+    return formatted_names_dict
 
 
 
 
 
+def product_checker(products_possibilities: list[list[str]], products_to_check: list[str]) -> bool:
+    # lokale Kopie, um nicht das Original zu zerstören
+    possibilities = [set(p) for p in products_possibilities]
+
+    for prod in products_to_check:
+        # finde Index einer Liste, die das Produkt enthält
+        for i, group in enumerate(possibilities):
+            if prod in group:
+                del possibilities[i]
+                break
+        else:
+            # falls kein break -> Produkt nicht gefunden
+            return False
+
+    # true nur, wenn alles gefunden und nichts übrig
+    return len(possibilities) == 0
+
+            
 
 
 
-
-
-
+def debug_file(name: str, content: str):
+    with open("logs/" + name, "a") as f:
+        f.write(content)
 
 
 
