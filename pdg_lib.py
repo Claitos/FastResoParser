@@ -583,6 +583,25 @@ def get_br_text_helper(branching_fraction: pdg.decay.PdgBranchingFraction, verbo
         if "to" in text or "TO" in text:
             error_pos = (numbers_converted[1] - numbers_converted[0]) / 2
             error_neg = (numbers_converted[1] - numbers_converted[0]) / 2
+
+        if "<" in text and "E" in text or "<" in text and "e" in text:
+            bound = numbers_converted[0] * 10 ** (-numbers_converted[1])
+            error_pos = bound / 2
+            error_neg = bound / 2
+
+        if ">" in text and "E" in text or ">" in text and "e" in text:
+            bound = numbers_converted[0] * 10 ** (-numbers_converted[1])
+            error_pos = (1-bound) / 2
+            error_neg = (1-bound) / 2
+
+        if "~" in text and "E" in text or "~" in text and "e" in text:
+            if text_numbers[0] == "100":
+                error_pos, error_neg = 0.001, 0.001
+            else:
+                approx = numbers_converted[0] * 10 ** (-numbers_converted[1])
+                error_pos = approx / 2
+                error_neg = approx / 2
+
         if verbose:
             print(f"text2_error positive: {round(error_pos, 10)}, text2_error negative: {round(error_neg, 10)}")
         return round(error_pos, 10), round(error_neg, 10)
@@ -641,11 +660,12 @@ def get_br_errors_helper(identifier, products_ids: list[int], products_names: li
                 print(f"Match found for {identifier} decay: {products_ids}")
                 err_pos = sv.error_positive
                 err_neg = sv.error_negative
-            elif product_checker(products_names, product_list_names):           
+            elif product_checker(products_names, product_list_names) or product_checker(products_names[::-1], product_list_names):           
                 print(f"Match found for {identifier} decay (names): {products_names}")
                 err_pos = sv.error_positive 
                 err_neg = sv.error_negative
             else:
+                debug_file("products_unmatched.txt", f"No match for {identifier} decay: {products_ids} with {product_list}  :  {product_list_names}\n")
                 continue
 
         if err_neg is None and err_pos is None:     # probably because the decay is just "seen" -> should have large errors but still need to check this
@@ -714,14 +734,6 @@ def get_br_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, v
 
 
 
-
-
-
-
-
-
-
-
 def get_decay_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi) -> pd.DataFrame:
     """
     Get branching ratio errors for decay modes in the decay DataFrame.
@@ -737,9 +749,12 @@ def get_decay_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi
     """
 
     logfolder = Path.cwd() / "logs"          # clear log folder of old files
-    files_to_delete = ["part_found.txt", "products.txt"]
+    files_to_delete = ["part_found.txt", "products.txt", "products_unmatched.txt"]
     for file in files_to_delete:
-        (logfolder / file).unlink()
+        try:
+            (logfolder / file).unlink()
+        except FileNotFoundError:
+            continue
 
     br_errors_pos, br_errors_neg = get_br_errors(p_df, d_df, api, verbose=True)
 
@@ -774,11 +789,16 @@ def formatted_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, str]
     lookup_dict = {
         "pi2(1880)+": "pi_2(1880)0",
         "Omega(2250)": "Omega(2250)-",
-        "Lambda(2350)": "Lambda(2350)0",
+        "eta'(958)": "eta^'(958)0",
+        "omega3(1670)": "omega_3(1670)0",
+        "f2'(1525)": "f_2^'(1525)0",
+        "a4(2040)": "a_4(1970)",
+        "phi(2170)": "phi(2170)0",
         "Ksi": "Xi",
         "rho3": "rho_3",
         "rho5": "rho_5",
         "eta2": "eta_2",
+        "phi3": "phi_3",
         "f0": "f_0",
         "f1": "f_1",
         "f2": "f_2",
@@ -788,6 +808,7 @@ def formatted_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, str]
         "a1": "a_1",
         "a2": "a_2",
         "a4": "a_4",
+        "b1": "b_1",
         "h1": "h_1",
         "pi1": "pi_1",
         "pi2": "pi_2",
@@ -797,19 +818,22 @@ def formatted_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, str]
         "K2*": "K_2^*",
         "K2": "K_2",
         "K3": "K_3",
+        "K4*": "K_4^*",
         "K4": "K_4",
-        "K5": "K_5"
-        # "Anti-Delta": "Deltabar",
-        # "Anti-Sigma": "Sigmabar",
-        # "Anti-Xi": "Xibar",
-        # "Anti-Omega": "Omegabar"
-        # "Anti-Proton": "pbar",
-        # "Anti-Neutron": "nbar"
-        # "Anti-Lambda": "Lambdabar"
-        # "Anti-K0": "K0bar",
-        # "Anti-K0*": "K0bar*"
-        # "Anti-K+": "K-",
-        # "Anti-K-": "K+"
+        "K5*": "K_5^*",
+        "K5": "K_5",
+        "K*": "K^*"
+
+    }
+
+    lookup_dict_anti = {
+        "Anti-Delta": "Deltabar",
+        "Anti-Sigma": "Sigmabar",
+        "Anti-Xi": "Xibar",
+        "Anti-Omega": "Omegabar",
+        "Anti-N": "Nbar",
+        "Anti-Lambda": "Lambdabar",
+        "Anti-K": "Kbar"
     }
 
     formatted_names = {}
@@ -819,6 +843,53 @@ def formatted_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, str]
         #print(type(name))  ->  str
         for key, value in lookup_dict.items():
             name = name.replace(key, value)
+
+        if "Sigma_0" in name:
+            name = name.replace("Sigma_0", "Sigma0")
+
+        if "Anti-" in name:
+            for key, value in lookup_dict_anti.items():
+                name = name.replace(key, value)
+            if name.endswith("+") or name.endswith("++"):
+                name = name.replace("+", "-")
+            elif name.endswith("-") or name.endswith("--"):
+                name = name.replace("-", "+")
+
+        if "Anti-pi" in name:
+            name = name.replace("Anti-pi", "pi")
+        if "Anti-rho" in name:
+            name = name.replace("Anti-rho", "rho")
+        if "Anti-a" in name:
+            name = name.replace("Anti-a", "a")
+        if "Anti-b" in name:
+            name = name.replace("Anti-b", "b")
+
+        if "Kbar" in name and name.endswith("-"):
+            name = name.replace("Kbar", "K")
+
+        if "Lambda" in name:
+            name = name + "0"
+
+        if name == "Omega(2380)" or name == "Omega(2470)":
+            name = name + "-"
+        if name == "Omegabar(2380)" or name == "Omegabar(2470)":
+            name = name + "+"
+
+        if "Sigma" in name and "(1730)" in name:
+            name = name.replace("1730", "1780")
+        
+        if "Sigma" in name and "(2000)" in name:
+            name = name.replace("(2000)", "(2010)")
+
+        if "Sigma" in name and "(1940)" in name and "M" in name:
+            name = name.replace("(1940)M", "(1910)")
+
+        if "Sigma" in name and "(1940)" in name and "P" in name:
+            name = name.replace("(1940)P", "(1940)")
+
+        if name == "K_0" or name == "Kbar_0":
+            name = name.replace("_", "")
+
         formatted_names[id] = name
 
     if verbose:
@@ -879,6 +950,16 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
         elif item.endswith("0") or item.endswith("+") or item.endswith("-"):
             lst.append(item[:-1])   # remove charge at the end
         return lst
+    
+    def treat_anti(lst, item):
+        if "Anti-" in item:
+            item_anti = item.replace("Anti-", "")
+            if item_anti.endswith("+") or item_anti.endswith("++"):
+                item_anti = item_anti.replace("+", "-")
+            elif item_anti.endswith("-") or item_anti.endswith("--"):
+                item_anti = item_anti.replace("-", "+")
+            lst = list_appender_helper(lst, item_anti)
+        return lst
 
     formatted_names_dict = {}
     for _, particle in p_df.iterrows():
@@ -890,18 +971,12 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
             name = name.replace(key, value)
 
         names_form = list_appender_helper(names_form, name)
-
-        if "Anti-" in name:
-            name_anti = name.replace("Anti-", "")
-            if name_anti.endswith("+") or name_anti.endswith("++"):
-                name_anti = name_anti.replace("+", "-")
-            elif name_anti.endswith("-") or name_anti.endswith("--"):
-                name_anti = name_anti.replace("-", "+")
-            names_form = list_appender_helper(names_form, name_anti)
+        names_form = treat_anti(names_form, name)
 
         if "*" in name:
             name_star = name.replace("*", "^*")
             names_form = list_appender_helper(names_form, name_star)
+            names_form = treat_anti(names_form, name_star)
         
         if "Anti-K" in name:
             name_k = name.replace("Anti-K", "Kbar")
@@ -914,6 +989,35 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
         if name == "n" or name == "p" or name == "Anti-n" or name == "Anti-p":
             names_form.append("N")
             names_form.append("Nbar")
+
+        if name == "eta'(958)":
+            names_form = list_appender_helper(names_form, "eta^'")
+            names_form = list_appender_helper(names_form, "eta^'(958)0")
+
+        if name == "rho+" or name == "Anti-rho+" or name == "rho0":
+            name_rho = name.replace("rho", "rho(770)")
+            names_form = list_appender_helper(names_form, name_rho)
+            names_form = treat_anti(names_form, name_rho)
+
+        if name == "omega(782)":
+            names_form = list_appender_helper(names_form, "omega")
+
+        if "K_0" in name:
+            name_k0 = name.replace("K_0", "K0")
+            names_form = list_appender_helper(names_form, name_k0)
+            names_form = treat_anti(names_form, name_k0)
+            if "Anti-K" in name_k0:
+                name_k0a = name_k0.replace("Anti-K", "Kbar")
+                names_form = list_appender_helper(names_form, name_k0a)
+
+        if "Sigma_0" in name:
+            name_sigma0 = name.replace("Sigma_0", "Sigma0")
+            names_form = list_appender_helper(names_form, name_sigma0)
+            names_form = treat_anti(names_form, name_sigma0)
+
+        if "phi(1020)" in name:
+            name_phi = name + "0"
+            names_form = list_appender_helper(names_form, name_phi)
 
 
         if verbose:

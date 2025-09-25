@@ -54,3 +54,6 @@ Plots/PDG-API/errors_plot_all.png
 output_decay.txt
 logs/part_found.txt
 logs/products.txt
+logs/products_unmatched.txt
+.gitignore
+logs/part_found copy.txt
