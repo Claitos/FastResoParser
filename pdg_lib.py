@@ -562,7 +562,7 @@ def get_product_lists_helper(branching_fraction: pdg.decay.PdgBranchingFraction,
 
 
 
-def get_br_text_helper(branching_fraction: pdg.decay.PdgBranchingFraction, verbose: bool = False) -> tuple[float, float]: 
+def get_br_text_helper(branching_fraction: pdg.decay.PdgBranchingFraction, reference_value: float, verbose: bool = False) -> tuple[float, float]: 
     text = branching_fraction.value_text
     unit = branching_fraction.units
 
@@ -575,9 +575,17 @@ def get_br_text_helper(branching_fraction: pdg.decay.PdgBranchingFraction, verbo
         print(f"Extracted numbers: {text_numbers}, converted: {numbers_converted}")
 
     if len(text_numbers) == 0:
+        possible_patterns = ["seen", "not seen", "possibly seen", "small", "large"]
+        if text in possible_patterns:
+            error_pos = reference_value / 2
+            error_neg = reference_value / 2
+        else:
+            print(f"Pattern '{text}' not recognized, returning nan")
+
         if verbose:
-            print("No valid numbers found.")
-        return np.nan, np.nan
+            print(f"No valid numbers found. Pattern '{text}' found, setting errors to reference value / 2: {reference_value/2}")
+        return round(error_pos, 10), round(error_neg, 10)
+    
     
     if len(text_numbers) == 2:
         if "to" in text or "TO" in text:
@@ -618,12 +626,18 @@ def get_br_text_helper(branching_fraction: pdg.decay.PdgBranchingFraction, verbo
             print(f"text3_error positive: {round(error_pos, 10)}, text3_error negative: {round(error_neg, 10)}")
         return round(error_pos, 10), round(error_neg, 10)
 
+
+    if np.isnan(error_pos) and np.isnan(error_neg):
+        if verbose:
+            print(f"No valid pattern found for text error extraction. num: {text_numbers}, text: {text}")
+
+
     return np.nan, np.nan
 
 
 
 
-def get_br_errors_helper(identifier, products_ids: list[int], products_names: list[list[str]], api: pdg.api.PdgApi, call_type="id", verbose: bool = False) -> tuple[float, float]:
+def get_br_errors_helper(identifier, products_ids: list[int], products_names: list[list[str]], api: pdg.api.PdgApi, reference_value: float, call_type="id", verbose: bool = False) -> tuple[float, float]:
 
     try:
         if call_type == "id":
@@ -665,13 +679,13 @@ def get_br_errors_helper(identifier, products_ids: list[int], products_names: li
                 err_pos = sv.error_positive 
                 err_neg = sv.error_negative
             else:
-                debug_file("products_unmatched.txt", f"No match for {identifier} decay: {products_ids} with {product_list}  :  {product_list_names}\n")
+                debug_file("products_unmatched.txt", f"No match for decay products with {product_list}  :  {product_list_names}\n")
                 continue
 
         if err_neg is None and err_pos is None:     # probably because the decay is just "seen" -> should have large errors but still need to check this
             if verbose:
                 print(f"No errors could be retrieved, try handling via text. Else nan")
-            err_pos, err_neg = get_br_text_helper(bf, verbose=verbose)
+            err_pos, err_neg = get_br_text_helper(bf, reference_value, verbose=verbose)
 
     return err_pos, err_neg
 
@@ -693,15 +707,19 @@ def get_br_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, v
     for i, decay in d_df.iterrows():
         if np.isnan(br_errors_pos[i]) or np.isnan(br_errors_neg[i]):
             mcid = int(decay["ParentID"])
+            branching_fraction = float(decay["BranchingRatio"])
+
             products = decay["ProductIDs"]
             products_ids = [x for x in products if x != 0]             # no dict of ints and strsbecause of possible duplicates which are deleted by dict
             products_names = [formatted_products_dict[x] for x in products_ids]
+
             if verbose:
                 print(f"\nGetting branching ratio errors for MCID {mcid} with products {products_ids} or names {products_names}")
                 print(decay)
-            error_pos, error_neg = get_br_errors_helper(mcid, products_ids, products_names, api, call_type="id", verbose=verbose)
+            error_pos, error_neg = get_br_errors_helper(mcid, products_ids, products_names, api, branching_fraction, call_type="id", verbose=verbose)
             if verbose:
                 print(f"\nGot branching ratio errors for MCID {mcid}: +{error_pos}, -{error_neg}")
+
             br_errors_pos[i] = error_pos
             br_errors_neg[i] = error_neg
 
@@ -712,15 +730,19 @@ def get_br_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, v
         if np.isnan(br_errors_pos[i]) or np.isnan(br_errors_neg[i]):
             mcid = int(decay["ParentID"])
             name = formatted_names_dict[mcid]
+            branching_fraction = float(decay["BranchingRatio"])
+
             products = decay["ProductIDs"]
             products_ids = [x for x in products if x != 0]
             products_names = [formatted_products_dict[x] for x in products_ids]
+
             if verbose:
                 print(f"\nGetting branching ratio errors for name {name} with products {products_ids} or names {products_names}")
                 print(decay)
-            error_pos, error_neg = get_br_errors_helper(name, products_ids, products_names, api, call_type="name", verbose=verbose)
+            error_pos, error_neg = get_br_errors_helper(name, products_ids, products_names, api, branching_fraction, call_type="name", verbose=verbose)
             if verbose:
                 print(f"\nGot branching ratio errors for name {name}: +{error_pos}, -{error_neg}")
+
             br_errors_pos[i] = error_pos
             br_errors_neg[i] = error_neg
 
@@ -734,15 +756,17 @@ def get_br_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, v
 
 
 
-def get_decay_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi) -> pd.DataFrame:
+def get_decay_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, apply_corrections: bool = False) -> pd.DataFrame:
     """
     Get branching ratio errors for decay modes in the decay DataFrame.
     Do post-processing on the DataFrame to handle particles and antiparticles and handle None and NaN values.
+    Apply bad evidence correction if specified.
 
     Parameters:
         p_df (pd.DataFrame): The input particle DataFrame.
         d_df (pd.DataFrame): The input decay DataFrame.
         api (pdg.api.PdgApi): The PDG API instance.
+        apply_corrections (bool): Whether to apply bad evidence corrections. Default is False.
 
     Returns:
         pd.DataFrame: The decay DataFrame with branching ratio errors added.
@@ -765,6 +789,14 @@ def get_decay_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi
     d_df_errors["BR Error Pos"] = br_errors_pos
     d_df_errors["BR Error Neg"] = br_errors_neg
 
+    d_df_errors = post_process_decay(d_df_errors)
+
+    if apply_corrections:
+        correction_factor = 0.5
+        d_df_errors = bad_evidence_correction_decay(p_df, d_df_errors, api, correction_factor=correction_factor, all=False, verbose=True)
+
+        d_df_errors = post_process_decay(d_df_errors)
+
     return d_df_errors
 
 
@@ -777,7 +809,7 @@ def get_decay_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi
 
 def formatted_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, str]:
     """
-    Format the names of the particles in the DataFrame.
+    Format the names of the particles in the DataFrame. Used to match particles by name with the PDG API.
 
     Parameters:
         p_df (pd.DataFrame): The input particle DataFrame.
@@ -904,13 +936,14 @@ def formatted_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, str]
 
 def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, list[str]]:
     """
-    Format the names of the particles in the DataFrame.
+    Format the names of the particles in the DataFrame. Handles multiple possible names for each particle. Is used for decay product matching.
 
     Parameters:
         p_df (pd.DataFrame): The input particle DataFrame.
+        verbose (bool): If True, print detailed processing information. Default is False.
 
     Returns:
-        formatted_names_dict (dict[int, list[str]]): A dictionary mapping particle IDs to formatted names.
+        formatted_names_dict (dict[int, list[str]]): A dictionary mapping particle IDs to a list of formatted names.
     """
 
     lookup_dict = {
@@ -926,6 +959,7 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
         "f2": "f_2",
         "f4": "f_4",
         "f6": "f_6",
+        "b1": "b_1",
         "a0": "a_0",
         "a1": "a_1",
         "a2": "a_2",
@@ -985,6 +1019,10 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
         if name == "Anti-p":
             name_p = name.replace("Anti-p", "pbar")
             names_form = list_appender_helper(names_form, name_p)
+        
+        if "Anti-Lambda" in name:
+            name_lam = name.replace("Anti-Lambda", "Lambdabar")
+            names_form = list_appender_helper(names_form, name_lam)
 
         if name == "n" or name == "p" or name == "Anti-n" or name == "Anti-p":
             names_form.append("N")
@@ -1018,6 +1056,14 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
         if "phi(1020)" in name:
             name_phi = name + "0"
             names_form = list_appender_helper(names_form, name_phi)
+        
+        if "f_" in name:
+            name_f = name + "0"
+            names_form = list_appender_helper(names_form, name_f)
+
+        if "h_" in name:
+            name_h = name + "0"
+            names_form = list_appender_helper(names_form, name_h)
 
 
         if verbose:
@@ -1034,6 +1080,15 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
 
 
 def product_checker(products_possibilities: list[list[str]], products_to_check: list[str]) -> bool:
+    """
+    Check if the products_to_check can be found in the products_possibilities.
+
+    Parameters:
+        products_possibilities (list[list[str]]): A list of lists of product names (formatted).
+        products_to_check (list[str]): A list of product names (formatted) to check.
+    Returns:
+        bool: True if all products_to_check can be found in products_possibilities, False otherwise.
+    """
     # lokale Kopie, um nicht das Original zu zerstören
     possibilities = [set(p) for p in products_possibilities]
 
@@ -1065,12 +1120,173 @@ def debug_file(name: str, content: str):
 
 
 
+def post_process_decay(d_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Post-process the decay DataFrame by checking for and handling particles/antiparticles.
+
+    Parameters:
+        d_df (pd.DataFrame): The input decay DataFrame.
+
+    Returns:
+        pd.DataFrame: The post-processed decay DataFrame.
+    """
+    counter_pos = 0
+    counter_neg = 0
+
+    print("\n\n\n-------------Post-processing decay DataFrame for antiparticles----------------\n\n\n")
+
+    for part_idx, decay in d_df.iterrows():
+
+        id = decay["ParentID"]
+        err_p = decay["BR Error Pos"]
+        err_n = decay["BR Error Neg"]
+        products = decay["ProductIDs"]
+        products_ids = [abs(x) for x in products if x != 0] 
+        
+        anti_decays = d_df[d_df["ParentID"] == -id]
+        anti_decays_index = anti_decays.index
+        print(f"\nProcessing particle {id} at {part_idx} with products {products_ids}, found anti-decays at indices {anti_decays_index}")
+
+        if anti_decays.empty:
+            continue
+
+        for index, anti_decay in anti_decays.iterrows():
+            products_anti = anti_decay["ProductIDs"]
+            products_ids_anti = [abs(x) for x in products_anti if x != 0] 
+            err_p_anti = anti_decay["BR Error Pos"]
+            err_n_anti = anti_decay["BR Error Neg"]
+
+            if Counter(products_ids) == Counter(products_ids_anti):
+                
+                if err_p != 0.0 and err_p_anti == 0.0:
+                    d_df.loc[index, "BR Error Pos"] = err_p
+                    counter_pos += 1
+                    print(f"Found Match for pos error at {index}")
+                if err_n != 0.0 and err_n_anti == 0.0:
+                    d_df.loc[index, "BR Error Neg"] = err_n
+                    counter_neg += 1
+                    print(f"Found Match for neg error at {index}")
+
+            else:
+                continue
+
+    print("\nProcessed anti-particle decay pos errors:", counter_pos)
+    print("Processed anti-particle decay neg errors:", counter_neg)
+
+    return d_df
 
 
 
 
 
 
+
+
+
+def bad_evidence_decay_helper(id:str, name:str, api: pdg.api.PdgApi, verbose: bool = False) -> bool:
+    """
+    Check for bad evidence in the decay data of a particle.
+
+    Parameters:
+        id (str): The MCID of the particle.
+        name (str): The name of the particle.
+        api (pdg.api.PdgApi): The PDG API instance.
+        verbose (bool): If True, print detailed processing information. Default is False.
+    Returns:
+        bool: True if bad evidence is found, False otherwise.
+    """
+
+
+    try:
+        particle = api.get_particle_by_mcid(id)
+    except:
+        try: 
+            particle = api.get_particle_by_name(name)
+        except:
+            if verbose:
+                print(f"Particle not found for ID: {id} and Name: {name}")
+            return True
+
+
+    
+    br_infos = list(particle.branching_fractions())
+    
+    if not br_infos:
+        if verbose:
+            print(f"No property information found for particle: {id} / {name}")
+        return True
+
+    if verbose:
+        print(f"len of br_infos: {len(br_infos)}")
+
+
+    default_return = False
+
+    for info in br_infos:                   # I dont know if this is the correct approach for branching ratios
+        if not info.has_best_summary():
+            default_return = True
+
+    return default_return
+
+
+
+
+def bad_evidence_correction_decay(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, correction_factor: float = 1.0, all: bool = False, verbose: bool = False) -> pd.DataFrame:
+    """
+    Apply bad evidence correction to the decay DataFrame.
+
+    Parameters:
+        p_df (pd.DataFrame): The particle DataFrame. -> only to get stable particles
+        d_df (pd.DataFrame): The input decay DataFrame.
+        api (pdg.api.PdgApi): The PDG API instance.
+        correction_factor (float): The factor to multiply the mass/width by to get the error. Default is 1.0 (100%).
+        all (bool): If True, apply correction to all particles without errors, regardless of evidence. Default is False.
+        verbose (bool): If True, print detailed processing information. Default is False.
+
+    Returns:
+        pd.DataFrame: The decay DataFrame with bad evidence correction applied.
+    """
+
+    if verbose:
+        print("\n\n\n-------------Applying bad evidence correction to decay DataFrame----------------\n\n\n")
+
+    formatted_names_dict = formatted_names(p_df, verbose=verbose)
+    counter = 0
+    stable_particles_test = p_df[p_df["Width (GeV)"] == 0.0]
+    stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
+
+    for index, decay in d_df.iterrows():
+
+        id = decay["ParentID"]
+        name = formatted_names_dict[id]
+        branching_ratio = decay["BranchingRatio"]
+        br_err_p = decay["BR Error Pos"]
+        br_err_n = decay["BR Error Neg"]
+
+        if id in stable_particles:
+            continue
+
+        if br_err_p == 0.0 and br_err_n == 0.0:
+            if verbose:
+                print(f"\n Processing particle for branching ratio: {name} / {id}")
+
+            has_bad_evidence = bad_evidence_decay_helper(id, name, api, verbose=verbose)
+
+            if all:
+                has_bad_evidence = True
+
+            if has_bad_evidence:
+                counter += 1
+                if verbose:
+                    print(f"Applying bad evidence correction for particle {name}")
+                d_df.loc[index, "BR Error Pos"] = correction_factor * branching_ratio
+                d_df.loc[index, "BR Error Neg"] = correction_factor * branching_ratio
+
+
+    if verbose:
+        print(f"Bad evidence correction applied to {counter} particles\n")
+
+    return d_df
 
 
 
