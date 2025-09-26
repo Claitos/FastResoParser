@@ -535,6 +535,36 @@ def bad_evidence_correction(p_df: pd.DataFrame, api: pdg.api.PdgApi, correction_
 #################################################################
 
 
+def clean_up_names(names: list[str]) -> list[str]:
+    """
+    Clean up the names by removing unwanted characters and formatting.
+
+    Parameters:
+        names (list[str]): List of particle names.
+
+    Returns:
+        list[str]: Cleaned up list of particle names.
+    """
+    cleaned_names = []
+    unwanted_things = ["helicity", "wave", "=", "(DE)", "(INT)", "(SD"]
+
+    for name in names:
+        clean = True
+        for thing in unwanted_things:
+            if thing in name:
+                clean = False
+                break
+        if name == ",":        
+            clean = False
+        if name.endswith(","):
+            name = name[:-1]
+        if "(including" in name or "[ign" in name:
+            break
+        if clean:
+            cleaned_names.append(name)
+    return cleaned_names
+
+
 
 
 def get_product_lists_helper(branching_fraction: pdg.decay.PdgBranchingFraction, verbose: bool = False) -> tuple[list[int], list[str]]: 
@@ -554,11 +584,48 @@ def get_product_lists_helper(branching_fraction: pdg.decay.PdgBranchingFraction,
             # if verbose:
             #     print(f"Decay item has no particle or the product is a subdecay")
             name_prod = item.name       # access name directly from item if no particle available
-            for _ in range(multi):
-                product_list_names.append(name_prod)
+
+            if " " in name_prod:
+                debug_file("whitespace.txt", f"\nWhitespace decay found: {name_prod}\n")
+                names = name_prod.split(" ")
+                debug_file("whitespace.txt", f"Split names: {names}\n")
+                clean_names = clean_up_names(names)
+                debug_file("whitespace.txt", f"Clean names: {clean_names}\n")
+
+                product_list_names.extend(clean_names)
+            else:
+                for _ in range(multi):
+                    product_list_names.append(name_prod)
 
     return product_list, product_list_names
 
+
+
+def product_checker(products_possibilities: list[list[str]], products_to_check: list[str]) -> bool:
+    """
+    Check if the products_to_check can be found in the products_possibilities.
+
+    Parameters:
+        products_possibilities (list[list[str]]): A list of lists of product names (formatted).
+        products_to_check (list[str]): A list of product names (formatted) to check.
+    Returns:
+        bool: True if all products_to_check can be found in products_possibilities, False otherwise.
+    """
+    # lokale Kopie, um nicht das Original zu zerstören
+    possibilities = [set(p) for p in products_possibilities]
+
+    for prod in products_to_check:
+        # finde Index einer Liste, die das Produkt enthält
+        for i, group in enumerate(possibilities):
+            if prod in group:
+                del possibilities[i]
+                break
+        else:
+            # falls kein break -> Produkt nicht gefunden
+            return False
+
+    # true nur, wenn alles gefunden und nichts übrig
+    return len(possibilities) == 0
 
 
 
@@ -693,7 +760,6 @@ def get_br_errors_helper(identifier, products_ids: list[int], products_names: li
 
 
 
-
 def get_br_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = False) -> tuple[list[float], list[float]]:
     br_errors_pos = [np.nan] * len(d_df)
     br_errors_neg = [np.nan] * len(d_df)
@@ -773,7 +839,7 @@ def get_decay_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi
     """
 
     logfolder = Path.cwd() / "logs"          # clear log folder of old files
-    files_to_delete = ["part_found.txt", "products.txt", "products_unmatched.txt"]
+    files_to_delete = ["part_found.txt", "products.txt", "products_unmatched.txt", "whitespace.txt"]
     for file in files_to_delete:
         try:
             (logfolder / file).unlink()
@@ -789,13 +855,13 @@ def get_decay_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi
     d_df_errors["BR Error Pos"] = br_errors_pos
     d_df_errors["BR Error Neg"] = br_errors_neg
 
-    d_df_errors = post_process_decay(d_df_errors)
+    d_df_errors = post_process_decay(d_df_errors, verbose=True)
 
     if apply_corrections:
         correction_factor = 0.5
         d_df_errors = bad_evidence_correction_decay(p_df, d_df_errors, api, correction_factor=correction_factor, all=False, verbose=True)
 
-        d_df_errors = post_process_decay(d_df_errors)
+        d_df_errors = post_process_decay(d_df_errors, verbose=False)
 
     return d_df_errors
 
@@ -1079,31 +1145,7 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
 
 
 
-def product_checker(products_possibilities: list[list[str]], products_to_check: list[str]) -> bool:
-    """
-    Check if the products_to_check can be found in the products_possibilities.
 
-    Parameters:
-        products_possibilities (list[list[str]]): A list of lists of product names (formatted).
-        products_to_check (list[str]): A list of product names (formatted) to check.
-    Returns:
-        bool: True if all products_to_check can be found in products_possibilities, False otherwise.
-    """
-    # lokale Kopie, um nicht das Original zu zerstören
-    possibilities = [set(p) for p in products_possibilities]
-
-    for prod in products_to_check:
-        # finde Index einer Liste, die das Produkt enthält
-        for i, group in enumerate(possibilities):
-            if prod in group:
-                del possibilities[i]
-                break
-        else:
-            # falls kein break -> Produkt nicht gefunden
-            return False
-
-    # true nur, wenn alles gefunden und nichts übrig
-    return len(possibilities) == 0
 
             
 
@@ -1118,20 +1160,20 @@ def debug_file(name: str, content: str):
 
 
 
-
-
-def post_process_decay(d_df: pd.DataFrame) -> pd.DataFrame:
+def post_process_decay(d_df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
     """
     Post-process the decay DataFrame by checking for and handling particles/antiparticles.
 
     Parameters:
         d_df (pd.DataFrame): The input decay DataFrame.
+        verbose (bool): If True, print detailed processing information. Default is False.
 
     Returns:
         pd.DataFrame: The post-processed decay DataFrame.
     """
     counter_pos = 0
     counter_neg = 0
+
 
     print("\n\n\n-------------Post-processing decay DataFrame for antiparticles----------------\n\n\n")
 
@@ -1145,7 +1187,8 @@ def post_process_decay(d_df: pd.DataFrame) -> pd.DataFrame:
         
         anti_decays = d_df[d_df["ParentID"] == -id]
         anti_decays_index = anti_decays.index
-        print(f"\nProcessing particle {id} at {part_idx} with products {products_ids}, found anti-decays at indices {anti_decays_index}")
+        if verbose:
+            print(f"\nProcessing particle {id} at {part_idx} with products {products_ids}, found anti-decays at indices {anti_decays_index}")
 
         if anti_decays.empty:
             continue
@@ -1161,24 +1204,22 @@ def post_process_decay(d_df: pd.DataFrame) -> pd.DataFrame:
                 if err_p != 0.0 and err_p_anti == 0.0:
                     d_df.loc[index, "BR Error Pos"] = err_p
                     counter_pos += 1
-                    print(f"Found Match for pos error at {index}")
+                    if verbose:
+                        print(f"Found Match for pos error at {index}")
                 if err_n != 0.0 and err_n_anti == 0.0:
                     d_df.loc[index, "BR Error Neg"] = err_n
                     counter_neg += 1
-                    print(f"Found Match for neg error at {index}")
+                    if verbose:
+                        print(f"Found Match for neg error at {index}")
 
             else:
                 continue
+
 
     print("\nProcessed anti-particle decay pos errors:", counter_pos)
     print("Processed anti-particle decay neg errors:", counter_neg)
 
     return d_df
-
-
-
-
-
 
 
 
@@ -1224,6 +1265,8 @@ def bad_evidence_decay_helper(id:str, name:str, api: pdg.api.PdgApi, verbose: bo
 
     for info in br_infos:                   # I dont know if this is the correct approach for branching ratios
         if not info.has_best_summary():
+            if verbose:
+                print(f"No best summary found for particle: {id} / {name}")
             default_return = True
 
     return default_return
@@ -1239,7 +1282,7 @@ def bad_evidence_correction_decay(p_df: pd.DataFrame, d_df: pd.DataFrame, api: p
         p_df (pd.DataFrame): The particle DataFrame. -> only to get stable particles
         d_df (pd.DataFrame): The input decay DataFrame.
         api (pdg.api.PdgApi): The PDG API instance.
-        correction_factor (float): The factor to multiply the mass/width by to get the error. Default is 1.0 (100%).
+        correction_factor (float): The factor to multiply the branching ratio by to get the error. Default is 1.0 (100% uncertainty).
         all (bool): If True, apply correction to all particles without errors, regardless of evidence. Default is False.
         verbose (bool): If True, print detailed processing information. Default is False.
 
@@ -1250,7 +1293,7 @@ def bad_evidence_correction_decay(p_df: pd.DataFrame, d_df: pd.DataFrame, api: p
     if verbose:
         print("\n\n\n-------------Applying bad evidence correction to decay DataFrame----------------\n\n\n")
 
-    formatted_names_dict = formatted_names(p_df, verbose=verbose)
+    formatted_names_dict = formatted_names(p_df, verbose=False)
     counter = 0
     stable_particles_test = p_df[p_df["Width (GeV)"] == 0.0]
     stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()

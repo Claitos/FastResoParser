@@ -57,3 +57,4 @@ logs/products.txt
 logs/products_unmatched.txt
 .gitignore
 logs/part_found copy.txt
+logs/whitespace.txt
