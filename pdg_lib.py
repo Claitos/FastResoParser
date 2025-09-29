@@ -546,19 +546,24 @@ def clean_up_names(names: list[str]) -> list[str]:
         list[str]: Cleaned up list of particle names.
     """
     cleaned_names = []
-    unwanted_things = ["helicity", "wave", "=", "(DE)", "(INT)", "(SD"]
+    unwanted_things = ["helicity", "wave", "=", "DE", "INT", "SD"]
 
     for name in names:
         clean = True
         for thing in unwanted_things:
             if thing in name:
-                clean = False
-                break
+                if "pi(" in name:
+                    name = "pi"
+                else:
+                    clean = False
+                    break
         if name == ",":        
             clean = False
         if name.endswith(","):
             name = name[:-1]
         if "(including" in name or "[ign" in name:
+            break
+        if name == "+":
             break
         if clean:
             cleaned_names.append(name)
@@ -570,6 +575,10 @@ def clean_up_names(names: list[str]) -> list[str]:
 def get_product_lists_helper(branching_fraction: pdg.decay.PdgBranchingFraction, verbose: bool = False) -> tuple[list[int], list[str]]: 
     product_list = []
     product_list_names = []
+
+    if "rho pi + pi+ pi- pi0" in branching_fraction.description:
+        return [111, 211, -211], ["rho", "pi"]
+
     for product in branching_fraction.decay_products:
         #print(product)
         item = product.item
@@ -659,23 +668,32 @@ def get_br_text_helper(branching_fraction: pdg.decay.PdgBranchingFraction, refer
             error_pos = (numbers_converted[1] - numbers_converted[0]) / 2
             error_neg = (numbers_converted[1] - numbers_converted[0]) / 2
 
-        if "<" in text and "E" in text or "<" in text and "e" in text:
+        elif "<" in text and "E" in text or "<" in text and "e" in text:
             bound = numbers_converted[0] * 10 ** (-numbers_converted[1])
             error_pos = bound / 2
             error_neg = bound / 2
 
-        if ">" in text and "E" in text or ">" in text and "e" in text:
+        elif ">" in text and "E" in text or ">" in text and "e" in text:
             bound = numbers_converted[0] * 10 ** (-numbers_converted[1])
             error_pos = (1-bound) / 2
             error_neg = (1-bound) / 2
 
-        if "~" in text and "E" in text or "~" in text and "e" in text:
+        elif "~" in text and "E" in text or "~" in text and "e" in text:
             if text_numbers[0] == "100":
                 error_pos, error_neg = 0.001, 0.001
             else:
                 approx = numbers_converted[0] * 10 ** (-numbers_converted[1])
                 error_pos = approx / 2
                 error_neg = approx / 2
+        
+        elif "E" in text or "e" in text:
+            if verbose:
+                print(f"Pattern with 2E: '{text}' not recognized, returning 0.01")
+            return 0.001, 0.001
+        
+        else:
+            if verbose:
+                print(f"Pattern for 2 numbers: '{text}' not recognized, returning nan")
 
         if verbose:
             print(f"text2_error positive: {round(error_pos, 10)}, text2_error negative: {round(error_neg, 10)}")
@@ -686,9 +704,15 @@ def get_br_text_helper(branching_fraction: pdg.decay.PdgBranchingFraction, refer
             diff = (numbers_converted[1] - numbers_converted[0]) / 2
             error_pos = diff * 10 ** (-numbers_converted[2])
             error_neg = diff * 10 ** (-numbers_converted[2])
-        if "to" in text or "TO" in text:
+
+        elif "to" in text or "TO" in text:
             error_pos = numbers_converted[2] - numbers_converted[1]
             error_neg = numbers_converted[1] - numbers_converted[0]
+
+        else:
+            if verbose:
+                print(f"Pattern for 3 numbers: '{text}' not recognized, returning nan")
+
         if verbose:
             print(f"text3_error positive: {round(error_pos, 10)}, text3_error negative: {round(error_neg, 10)}")
         return round(error_pos, 10), round(error_neg, 10)
@@ -752,6 +776,11 @@ def get_br_errors_helper(identifier, products_ids: list[int], products_names: li
         if err_neg is None and err_pos is None:     # probably because the decay is just "seen" -> should have large errors but still need to check this
             if verbose:
                 print(f"No errors could be retrieved, try handling via text. Else nan")
+            err_pos, err_neg = get_br_text_helper(bf, reference_value, verbose=verbose)
+        
+        elif err_neg == 0.0 and err_pos == 0.0:        # sometimes errors are exactly zero, which is not realistic --> Api does bullshit
+            if verbose:
+                print(f"Errors are zero, try handling via text. Else nan")
             err_pos, err_neg = get_br_text_helper(bf, reference_value, verbose=verbose)
 
     return err_pos, err_neg
@@ -1073,6 +1102,12 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
         names_form = list_appender_helper(names_form, name)
         names_form = treat_anti(names_form, name)
 
+        if name == "K_0" or name == "Anti-K_0":
+            names_form = list_appender_helper(names_form, "K(S)0")
+            names_form = list_appender_helper(names_form, "K(L)0")
+            names_form = list_appender_helper(names_form, "K0S")
+            names_form = list_appender_helper(names_form, "K0L")
+
         if "*" in name:
             name_star = name.replace("*", "^*")
             names_form = list_appender_helper(names_form, name_star)
@@ -1250,7 +1285,7 @@ def bad_evidence_decay_helper(id:str, name:str, api: pdg.api.PdgApi, verbose: bo
 
 
     
-    br_infos = list(particle.branching_fractions())
+    br_infos = list(particle.branching_fractions(require_summary_data=True))
     
     if not br_infos:
         if verbose:
@@ -1297,6 +1332,7 @@ def bad_evidence_correction_decay(p_df: pd.DataFrame, d_df: pd.DataFrame, api: p
     counter = 0
     stable_particles_test = p_df[p_df["Width (GeV)"] == 0.0]
     stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
+    debug_parts_dict = {}
 
     for index, decay in d_df.iterrows():
 
@@ -1324,10 +1360,14 @@ def bad_evidence_correction_decay(p_df: pd.DataFrame, d_df: pd.DataFrame, api: p
                     print(f"Applying bad evidence correction for particle {name}")
                 d_df.loc[index, "BR Error Pos"] = correction_factor * branching_ratio
                 d_df.loc[index, "BR Error Neg"] = correction_factor * branching_ratio
+            else:
+                debug_parts_dict[id] = name
 
 
     if verbose:
-        print(f"Bad evidence correction applied to {counter} particles\n")
+        print(f"\n Bad evidence correction applied to {counter} particles")
+        print(f"Particles without bad evidence that were not corrected: {debug_parts_dict}")
+        print(f"Number of particles without bad evidence that were not corrected: {len(debug_parts_dict)}")
 
     return d_df
 
