@@ -578,6 +578,8 @@ def get_product_lists_helper(branching_fraction: pdg.decay.PdgBranchingFraction,
 
     if "rho pi + pi+ pi- pi0" in branching_fraction.description:
         return [111, 211, -211], ["rho", "pi"]
+    if "--> 3 pi" in branching_fraction.description:
+        return [], ["rho", "pi"]
 
     for product in branching_fraction.decay_products:
         #print(product)
@@ -1116,6 +1118,9 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
         if "Anti-K" in name:
             name_k = name.replace("Anti-K", "Kbar")
             names_form = list_appender_helper(names_form, name_k)
+            if "*" in name_k:
+                name_ks = name_k.replace("*", "^*")
+                names_form = list_appender_helper(names_form, name_ks)
 
         if name == "Anti-p":
             name_p = name.replace("Anti-p", "pbar")
@@ -1141,6 +1146,9 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
         if name == "omega(782)":
             names_form = list_appender_helper(names_form, "omega")
 
+        if "K*(892)" in name:
+            names_form = list_appender_helper(names_form, "Kbar^*(892)")
+
         if "K_0" in name:
             name_k0 = name.replace("K_0", "K0")
             names_form = list_appender_helper(names_form, name_k0)
@@ -1148,11 +1156,19 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
             if "Anti-K" in name_k0:
                 name_k0a = name_k0.replace("Anti-K", "Kbar")
                 names_form = list_appender_helper(names_form, name_k0a)
+            
+        if name == "K_0" or name == "Anti-K_0" or name == "K+" or name == "Anti-K+" or name == "K-" or name == "Anti-K-":
+            names_form = list_appender_helper(names_form, "Kbar")
 
         if "Sigma_0" in name:
             name_sigma0 = name.replace("Sigma_0", "Sigma0")
             names_form = list_appender_helper(names_form, name_sigma0)
             names_form = treat_anti(names_form, name_sigma0)
+
+        if "Sigma(1385)" in name:
+            name_sigma1385 = name.replace("Sigma(1385)", "Sigma^*(1385)")
+            names_form = list_appender_helper(names_form, name_sigma1385)
+            names_form = treat_anti(names_form, name_sigma1385)
 
         if "phi(1020)" in name:
             name_phi = name + "0"
