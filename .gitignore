@@ -60,3 +60,4 @@ logs/part_found copy.txt
 logs/whitespace.txt
 Plots/PDG-API/errors_decay.png
 Plots/PDG-API/errors_decay_all.png
+logs/output_degeneracy.txt

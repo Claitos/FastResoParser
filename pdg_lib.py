@@ -18,8 +18,6 @@ from pathlib import Path
 
 
 
-
-
 def get_values_text(summary_value, verbose: bool = False):
     unit_dict = {"MeV": 1e-3}
     text = summary_value.value_text
@@ -48,7 +46,6 @@ def get_values_text(summary_value, verbose: bool = False):
         return round(error_pos, 10), round(error_neg, 10)
 
     return np.nan, np.nan
-
 
 
 
@@ -235,8 +232,6 @@ def get_width_errors(p_df :pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = Fa
 
 
 
-
-
 def replace_nan_none(input_list: list[float], default_value=0.0) -> list[float]:
     """
     Replaces all None and np.nan values in a list with default_value.
@@ -370,6 +365,7 @@ def format_names(p_df: pd.DataFrame, verbose: bool = False) -> list[str]:
 
 
 
+
 def get_particle_errors(p_df: pd.DataFrame, api: pdg.api.PdgApi, apply_corrections: bool = False) -> pd.DataFrame:
     """
     Get mass and width errors for particles in the DataFrame.
@@ -408,8 +404,6 @@ def get_particle_errors(p_df: pd.DataFrame, api: pdg.api.PdgApi, apply_correctio
         p_df_errors = post_process(p_df_errors)
 
     return p_df_errors
-
-
 
 
 
@@ -526,6 +520,134 @@ def bad_evidence_correction(p_df: pd.DataFrame, api: pdg.api.PdgApi, correction_
 
 
 
+
+#################################################################
+#
+#
+#           Functions to extract degeneracy of particles
+#
+#
+#################################################################
+
+
+
+def get_particle_degeneracy(p_df: pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = False) -> pd.DataFrame:
+    """
+    Get degeneracy for particles in the DataFrame.
+    Do post-processing on the DataFrame to check whether degeneracy is the same in list vs. API.
+
+    Parameters:
+        p_df (pd.DataFrame): The input particle DataFrame.
+        api (pdg.api.PdgApi): The PDG API instance.
+        verbose (bool): Whether to print verbose output.
+
+    Returns:
+        pd.DataFrame: The DataFrame with API degeneracy added.
+    """
+    degeneracy = get_degeneracy(p_df, api, verbose=verbose)
+
+    degeneracy = replace_nan_none(degeneracy)
+
+    p_df_deg = p_df.copy()
+
+    # Add the errors to the DataFrame
+    p_df_deg["Degeneracy_API"] = degeneracy
+
+    # Post-process the DataFrame
+
+    if verbose:
+        print("\n\n\n-------------Checking degeneracy errors by id or formatted name----------------\n\n\n")
+
+    counter_mismatch = 0
+    for _, particle in p_df_deg.iterrows():
+        deg = particle["Degeneracy"]
+        deg_api = particle["Degeneracy_API"]
+        if deg != deg_api:
+            if verbose:
+                print(f"Degeneracy mismatch for particle {particle['Name']} / {particle['ID']}: Degeneracy list = {deg}, Degeneracy API = {deg_api}")
+            counter_mismatch += 1
+
+    if verbose:
+        print(f"\nTotal degeneracy mismatches found: {counter_mismatch}")
+
+    return p_df_deg
+
+
+
+def get_degeneracy(p_df :pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = False) -> list[float]:
+
+    degeneracy = [np.nan] * len(p_df)
+    
+    formatted_names_dict = formatted_names(p_df, verbose=verbose)
+
+    if verbose:
+        print("\n\n\n-------------Getting degeneracy errors by id or formatted name----------------\n\n\n")
+
+    for i, mcid in enumerate(p_df["ID"]):
+        name = formatted_names_dict[mcid]
+
+        if verbose:
+            print(f"\nGetting degeneracy for MCID {mcid} / Name {name}")
+        try:
+            particle = api.get_particle_by_mcid(mcid)
+        except:
+            try:
+                particle = api.get_particle_by_name(name)
+            except:
+                if verbose:
+                    print(f"Particle not found for ID: {mcid} and Name: {name}")
+                continue
+
+        spin = particle.quantum_J
+        if verbose:
+            print(f"Got spin for MCID {mcid} / Name {name}: {spin}")
+
+        
+        if "/" in str(spin):
+            if ">=" in str(spin):
+                spin = spin.replace(">=", "")
+            numerator, denominator = str(spin).split("/")
+            spin = float(numerator) / float(denominator)
+        elif "?" in str(spin):
+            if verbose:
+                print(f"Spin is unknown, setting degeneracy to nan")
+            continue
+        elif spin is None:
+            if verbose:
+                print(f"Spin is None, setting degeneracy to nan")
+            continue
+        else:
+            spin = float(spin)
+
+
+        degeneracy[i] = 2 * spin + 1
+        if verbose:
+            print(f"Calculated degeneracy: {degeneracy[i]}")
+
+    return degeneracy
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #################################################################
 #
 #
@@ -533,6 +655,7 @@ def bad_evidence_correction(p_df: pd.DataFrame, api: pdg.api.PdgApi, correction_
 #
 #
 #################################################################
+
 
 
 def clean_up_names(names: list[str]) -> list[str]:
@@ -568,7 +691,6 @@ def clean_up_names(names: list[str]) -> list[str]:
         if clean:
             cleaned_names.append(name)
     return cleaned_names
-
 
 
 
@@ -729,7 +851,6 @@ def get_br_text_helper(branching_fraction: pdg.decay.PdgBranchingFraction, refer
 
 
 
-
 def get_br_errors_helper(identifier, products_ids: list[int], products_names: list[list[str]], api: pdg.api.PdgApi, reference_value: float, call_type="id", verbose: bool = False) -> tuple[float, float]:
 
     try:
@@ -789,8 +910,6 @@ def get_br_errors_helper(identifier, products_ids: list[int], products_names: li
 
 
 
-
-
 def get_br_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, verbose: bool = False) -> tuple[list[float], list[float]]:
     br_errors_pos = [np.nan] * len(d_df)
     br_errors_neg = [np.nan] * len(d_df)
@@ -844,12 +963,6 @@ def get_br_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi, v
             br_errors_neg[i] = error_neg
 
     return br_errors_pos, br_errors_neg
-
-
-
-
-
-
 
 
 
@@ -1029,8 +1142,6 @@ def formatted_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, str]
 
 
 
-
-
 def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[int, list[str]]:
     """
     Format the names of the particles in the DataFrame. Handles multiple possible names for each particle. Is used for decay product matching.
@@ -1194,20 +1305,9 @@ def formatted_product_names(p_df: pd.DataFrame, verbose: bool = False) -> dict[i
 
 
 
-
-
-
-
-            
-
-
-
 def debug_file(name: str, content: str):
     with open("logs/" + name, "a") as f:
         f.write(content)
-
-
-
 
 
 
@@ -1274,7 +1374,6 @@ def post_process_decay(d_df: pd.DataFrame, verbose: bool = False) -> pd.DataFram
 
 
 
-
 def bad_evidence_decay_helper(id:str, name:str, api: pdg.api.PdgApi, verbose: bool = False) -> bool:
     """
     Check for bad evidence in the decay data of a particle.
@@ -1321,7 +1420,6 @@ def bad_evidence_decay_helper(id:str, name:str, api: pdg.api.PdgApi, verbose: bo
             default_return = True
 
     return default_return
-
 
 
 
@@ -1433,6 +1531,8 @@ def bad_evidence_correction_decay(p_df: pd.DataFrame, d_df: pd.DataFrame, api: p
 #
 #
 #################################################################
+
+
 
 def get_mass_errors_deprecated(p_df :pd.DataFrame, api: pdg.api.PdgApi) -> tuple[list[float], list[float]]:
     unit = "GeV"
