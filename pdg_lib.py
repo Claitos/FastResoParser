@@ -890,7 +890,7 @@ def get_decay_errors(p_df: pd.DataFrame, d_df: pd.DataFrame, api: pdg.api.PdgApi
 
     if apply_corrections:
         correction_factor = 0.5
-        d_df_errors = bad_evidence_correction_decay(p_df, d_df_errors, api, correction_factor=correction_factor, all=False, verbose=True)
+        d_df_errors = bad_evidence_correction_decay(p_df, d_df_errors, api, correction_factor=correction_factor, all=True, verbose=True)
 
         d_df_errors = post_process_decay(d_df_errors, verbose=False)
 
