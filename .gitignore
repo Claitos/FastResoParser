@@ -62,3 +62,8 @@ Plots/PDG-API/errors_decay.png
 Plots/PDG-API/errors_decay_all.png
 logs/output_degeneracy.txt
 __pycache__/sampler_lib.cpython-312.pyc
+logs/edge.txt
+Datafiles_sampled/edge_study/PDG2016Plus_width_plus.dat
+Datafiles_sampled/edge_study/PDG2016Plus_width_minus.dat
+Datafiles_sampled/edge_study/PDG2016Plus_mass_plus.dat
+Datafiles_sampled/edge_study/PDG2016Plus_mass_minus.dat
