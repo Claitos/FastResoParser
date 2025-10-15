@@ -440,6 +440,59 @@ def cutting_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test", cu
 
 
 
+def cutting_dataframes(particles_df: pd.DataFrame, decays_df: pd.DataFrame, cut: float = 1e-02, verbose: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Applies a cut to filter particles based on their importance score.
+    It keeps particles with an importance score above the specified cut value.
+    The function also retains stable particles in the final output dataframes.
+
+    :param particles_df: The DataFrame containing particle information.
+    :param decays_df: The DataFrame containing decay channel information.
+    :param cut: The threshold for the importance score to keep a particle.
+    :param verbose: If True, prints additional information. Default is False.
+    :return: A tuple containing the filtered particles and decays DataFrames.
+    """
+
+    stable_particles_test = particles_df[particles_df["Width (GeV)"] == 0.0]
+    stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
+
+    importance_scores = []
+    for id in particles_df["ID"]:
+        #print(id)
+        importance = importance_score(id, particles_df, decays_df)
+        importance_scores.append(importance)
+
+    norm_importance_scores = normalize_scores(importance_scores)
+    particles_df["Importance Score"] = norm_importance_scores
+
+
+    important_particles = []
+    for _, particle in particles_df.iterrows():
+        importance = particle["Importance Score"]
+        particle_id = particle["ID"]
+        if importance > cut:  # Threshold for importance
+            important_particles.append(particle_id)
+        
+    total_score = 0
+    for id in important_particles:
+        importance = particles_df.loc[particles_df["ID"] == id, "Importance Score"].values[0]
+        total_score += importance
+
+    all_important_particles = important_particles + stable_particles  # Keep a copy of all important particles
+    all_important_particles_unique = list(set(all_important_particles))  # Remove duplicates
+
+    if verbose:
+        print(f"No. of important particles (importance > {cut}): {len(important_particles)-1}")
+        print(f"Total importance score for important particles: {total_score-1:.9f}")
+        print(f"All important particles (unique) with stable: {all_important_particles_unique}")
+
+    particles_df_cut = particles_df.copy() # create a copy to avoid modifying the original DataFrame
+    decays_df_cut = decays_df.copy() # create a copy to avoid modifying the original DataFrame
+
+    particles_df_cut, decays_df_cut = delete_particle_list_helper(all_important_particles_unique, particles_df_cut, decays_df_cut)
+
+    return particles_df_cut, decays_df_cut
+
 
 
 

@@ -29,11 +29,11 @@ def reverser_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test", c
 
 def reverser_routine_new(dir_name: str = "cuts_test", no_lists: int = 1):
     """
-    Reverses the lines of the specified file for a given cut and directory name.
+    Reverses the lines of the specified files in the given directory.
     
     Args:
-        cut (list[float]): The cut value to be used in the file name.
-        dir_name (str): The directory name where the input file is located.
+        dir_name (str): The directory name where the input files are located.
+        no_lists (int): The number of files to be processed.
     """
     for i in range(no_lists):
         
