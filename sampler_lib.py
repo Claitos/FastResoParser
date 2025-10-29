@@ -5,6 +5,7 @@ import parser
 import reverser
 from pathlib import Path
 import random as rd
+from scipy.sparse import csr_matrix
 
 
 ################################################################
@@ -176,16 +177,17 @@ def br_edge(d_df: pd.DataFrame, edge_id: str = "+") -> pd.DataFrame:
     if edge_id not in ["+", "-"]:
         raise ValueError("edge_id must be either '+' or '-'")
 
-    err_p = d_df["BR Error Pos"]
-    err_n = d_df["BR Error Neg"]
+    err_p = d_df["BR Error Pos"].values
+    err_n = d_df["BR Error Neg"].values
+    brs = d_df["BranchingRatio"].values
 
     d_df_br = d_df.copy()   # create a copy to avoid modifying the original DataFrame
 
 
     if edge_id == "+":
-        d_df_br["BranchingRatio"] = min(d_df_br["BranchingRatio"] + err_p, 1)
+        d_df_br["BranchingRatio"] = np.minimum(d_df_br["BranchingRatio"] + err_p, 1)
     else:
-        d_df_br["BranchingRatio"] = max(d_df_br["BranchingRatio"] - err_n, 0)
+        d_df_br["BranchingRatio"] = np.maximum(d_df_br["BranchingRatio"] - err_n, 0)
 
     return d_df_br
 
@@ -248,7 +250,7 @@ def edge_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0, verbose: bo
 
 
 
-def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0, verbose: bool = False) -> None:
+def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0,  verbose: bool = False) -> None:
     """
     Perform a sampling study by generating data files with mass and branching ratio values sampled. Optionally apply a importance score cut to the particles in the dataframes.
     Parameters:
@@ -258,29 +260,45 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0, verbose
     """
 
     if cut == 0:
-        dir_name = "Datafiles_sampled/sampling_studys/br_rejection_0"
+        dir_name = "Datafiles_sampled/sampling_studys/mass_sam_0"
         p_df_cut = p_df
         d_df_cut = d_df
     else:
-        dir_name = f"Datafiles_sampled/sampling_studys/br_rejection_{cut:.0e}"
-        p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, verbose=True)
+        dir_name = f"Datafiles_sampled/sampling_studys/mass_sam_{cut:.0e}"
+        p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, verbose=verbose)
 
 
-    n_samples = 20
+    n_samples = 100
     p_dfs = [p_df_cut]
     d_dfs = [d_df_cut]
 
-    for _ in range(n_samples):
-        if verbose:
-            print(f"\n\n\n-------Sampling iteration {_+1}-------\n\n\n")
-        else:
-            print(f"Sampling iteration {_+1}")
+    # for _ in range(n_samples):
+    #     if verbose:
+    #         print(f"\n\n\n-------Sampling iteration {_+1}-------\n\n\n")
+    #     else:
+    #         print(f"Sampling iteration {_+1}")
 
-        sampled_p_df = p_df_cut.copy()  # Currently no sampling for masses implemented
-        sampled_d_df = sample_branching_ratios(d_df_cut, rej_sampling=True, verbose=verbose)
+    #     sampled_p_df = p_df_cut.copy()  
+    #     sampled_d_df = sample_branching_ratios(d_df_cut, rej_sampling=True, verbose=verbose)
+
+    #     p_dfs.append(sampled_p_df)
+    #     d_dfs.append(sampled_d_df)
+
+
+    sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples, verbose=verbose)
+
+    for i in range(n_samples):
+        if verbose:
+            print(f"\n\n\n-------Sampling iteration {i+1}-------\n\n\n")
+        else:
+            print(f"Sampling iteration {i+1}")
+
+        sampled_p_df = sampled_df_list[i]
+        sampled_d_df = d_df_cut.copy()  
 
         p_dfs.append(sampled_p_df)
         d_dfs.append(sampled_d_df)
+
 
     no_lists = len(p_dfs)
 
@@ -311,6 +329,7 @@ def sample_branching_ratios(d_df: pd.DataFrame, rej_sampling: bool = True, verbo
 
     sampled_dfs = d_df.copy() # create a copy to avoid modifying the original DataFrame
     fail_counter = 0
+    max_no_attempts = 0
 
     for id in sampled_dfs["ParentID"].unique():
 
@@ -335,35 +354,39 @@ def sample_branching_ratios(d_df: pd.DataFrame, rej_sampling: bool = True, verbo
 
 
             biased = rd.randint(0, no_modes - 1)
+            lower = brs[biased] - br_err_n_corrected[biased]
+            upper = brs[biased] + br_err_p_corrected[biased]
             if verbose:
-                print(f"Using rejection sampling. Biased mode index: {biased}")
+                print(f"Using rejection sampling. Biased mode index: {biased} with range [{lower}, {upper}]")
 
-            sampled_brs = np.zeros_like(brs)
+            sampled_brs = np.zeros(no_modes)
             n_attempts = 0
             max_attempts = 100000
 
             while n_attempts < max_attempts:
                 n_attempts += 1
 
-
                 for i in range(no_modes):
                     if i == biased:
-                        continue
+                        sampled_brs[i] = 0.0
                     else:
                         sampled_brs[i] = rd.uniform(brs[i] - br_err_n_corrected[i], brs[i] + br_err_p_corrected[i])
 
                 sampled_brs[biased] = 1.0 - np.sum(sampled_brs)
 
-                if sampled_brs[biased] > brs[biased] - br_err_n_corrected[biased] and sampled_brs[biased] < brs[biased] + br_err_p_corrected[biased]:
+                if sampled_brs[biased] >= lower and sampled_brs[biased] <= upper:
                     if verbose:
-                        print(f"Sampled BRs for Parent ID {id} after {n_attempts} attempts: {sampled_brs.tolist()}")
+                        print(f"Sampled BRs for Parent ID {id} after {n_attempts} attempts: {sampled_brs.tolist()} with sum {round(np.sum(sampled_brs), 6)}")
                     break
             else:
                 if verbose:
                     print(f"Warning: Maximum attempts reached for Parent ID {id}. Using original BRs {brs.tolist()}.")
                 fail_counter += 1
                 sampled_brs = brs.copy()
-            
+
+            if n_attempts > max_no_attempts:
+                max_no_attempts = n_attempts
+               
         else:
             sampled_brs = np.zeros_like(brs)
             for i in range(no_modes):
@@ -377,9 +400,359 @@ def sample_branching_ratios(d_df: pd.DataFrame, rej_sampling: bool = True, verbo
         
     
     print("\nSampling complete.")
+    print("Maximum number of attempts in rejection sampling for a single parent ID:", max_no_attempts)
     print(f"Total failures (rejection sampling): {fail_counter}")
     print(f"Total successful samples: {len(sampled_dfs['ParentID'].unique()) - fail_counter} \n")
 
     return sampled_dfs
 
 
+
+
+def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbose: bool = False) -> list[pd.DataFrame]:
+    """
+    Generate a particle DataFrame with masses sampled according to their uncertainties fulfilling all the linear constraints that are given by "mass conservation".
+    To sample the masses a hit and run MCMC algorithm is used.
+
+    Parameters:
+        p_df (pd.DataFrame): DataFrame containing the mass data.
+        verbose (bool): If True, print additional information.
+
+    Returns:
+        pd.DataFrame: DataFrame with sampled masses.
+    """
+
+    stable_particles_test = p_df[p_df["Width (GeV)"] == 0.0]
+    stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
+    stable_particles.remove(3212) # Remove Sigma0 from list since it decays to Lambda + photon
+    stable_particles.remove(-3212) # Remove anti-Sigma0 from list since it decays to anti-Lambda + photon
+    stable_particles_ids = p_df[p_df["ID"].isin(stable_particles)].index.tolist()
+
+    if verbose:
+        print(f"Stable particles (no sampling applied): {stable_particles}\nwith indices {stable_particles_ids}\n")
+
+    masses = p_df["Mass (GeV)"].values
+    mass_err_p = p_df["Mass Error Pos (GeV)"].values
+    mass_err_n = p_df["Mass Error Neg (GeV)"].values
+
+    lower_bounds = masses - mass_err_n
+    upper_bounds = masses + mass_err_p
+
+    scale = upper_bounds - lower_bounds # scale for each mass bounds to sample direction vector later
+    scale = np.clip(scale, a_min=1e-5, a_max=None)  # avoid zero scale for stable particles
+
+    if verbose:
+        print(f"Initial masses: {masses.tolist()}")
+        print(f"Lower bounds: {lower_bounds.tolist()}")
+        print(f"Upper bounds: {upper_bounds.tolist()}")
+        #print(f"Mass scales : {(upper_bounds - lower_bounds).tolist()}")
+        print(f"Scale: {scale.tolist()} \n")
+
+    constraints_matrix = np.zeros((len(d_df), len(p_df)))
+
+    for i, row in d_df.iterrows():
+        parent_id = row["ParentID"]
+        decay_products = row["ProductIDs"]
+        decay_product_ids = [int(dp) for dp in decay_products]
+        decay_product_ids = [dp for dp in decay_product_ids if dp != 0]  # Remove zeros
+
+        parent_index = p_df.index[p_df["ID"] == parent_id][0]
+        constraints_matrix[i, parent_index] = 1
+
+        if parent_id in stable_particles:
+            if verbose:
+                print(f"Skipping stable parent particle ID {parent_id} in constraints. Just leave 1 at its index and skip the check for decay products.")
+            continue
+
+        for dp_id in decay_product_ids:
+            dp_index = p_df.index[p_df["ID"] == dp_id][0]
+            constraints_matrix[i, dp_index] = -1
+
+    if verbose:
+        print(f"\nConstraints matrix with shape {constraints_matrix.shape} :\n", constraints_matrix)
+        print(f"first constraint row: {constraints_matrix[0]} \n\n")
+
+    csr_constraints = csr_matrix(constraints_matrix)
+
+    sampled_masses = hit_and_run_uniform(csr_constraints, 1e-09, lower_bounds, upper_bounds, masses, stable_particles_ids, scale, n_samples=n_samples, burn=1000, thin=5000, verbose=verbose)
+
+    if verbose:
+        print(f"\n\n\nSampled masses shape: {sampled_masses.shape}")
+        if np.any(sampled_masses - lower_bounds < 0):
+            print("Error: Some sampled masses are below the lower bounds!")
+        if np.any(sampled_masses - upper_bounds > 0):
+            print("Error: Some sampled masses are above the upper bounds!")
+
+    sampled_df_list = []
+
+    for i in range(n_samples):
+        sampled_p_df = p_df.copy()  # create a copy to avoid modifying the original DataFrame
+        sampled_p_df["Mass (GeV)"] = sampled_masses[i]
+        sampled_df_list.append(sampled_p_df)
+
+    return sampled_df_list
+
+
+
+
+def hit_and_run_uniform(A, eps, lower, upper, x0, stable_ids, scale, n_samples=20, burn=5, thin=1, verbose=False) -> np.ndarray:
+    """
+    Uniform hit-and-run sampler inside convex region:
+        A x >= eps, lower <= x <= upper
+
+    Parameters:
+        A (csr_matrix): Constraint matrix.
+        eps (float): Small positive value for constraints.
+        lower (np.ndarray): Lower bounds for each variable.
+        upper (np.ndarray): Upper bounds for each variable.
+        x0 (np.ndarray): Initial feasible point.
+        stable_ids (list): List of indices of variables that should remain fixed.
+        scale (np.ndarray): Scale for each variable to sample direction vector.
+        n_samples (int): Number of samples to generate.
+        burn (int): Number of burn-in iterations.
+        thin (int): Thinning factor.
+        verbose (bool): If True, print additional information.
+    Returns:
+        np.ndarray: Array of sampled points.
+    """
+
+    if verbose:
+        print("Starting hit-and-run sampling...")
+        print(f"number of samples: {n_samples}, burn-in: {burn}, thinning: {thin}")
+        print(f"total iterations: {n_samples * thin + burn}")
+
+    n = len(x0)
+    if not isinstance(A, csr_matrix):
+        A = csr_matrix(A)
+
+    x = x0.copy()
+    samples = []
+
+    for step in range(n_samples * thin + burn):
+        # 1. Choose random direction (normalize to unit length)
+        d = np.random.normal(size=n, scale=scale)
+        for id in stable_ids:
+            d[id] = 0.0
+        d /= np.linalg.norm(d)
+
+        # 2. Compute feasible step range [t_min, t_max]
+        t_min, t_max = feasible_t_range(A, eps, x, d, lower, upper, verbose=False)
+
+        if t_min > t_max:
+            if verbose:
+                print("Numerical issue -> skip this step")
+            continue
+
+        # 3. Sample t uniformly in [t_min, t_max]
+        t = np.random.uniform(t_min, t_max)
+
+        # 4. Move
+        x += t * d
+
+        # 5. Collect
+        if step >= burn and ((step - burn) % thin == 0):
+            samples.append(x.copy())
+
+        if verbose and (step + 1) % thin == 0:
+            print(f"Iteration {step+1}/{n_samples*thin + burn}")
+
+    return np.array(samples)
+
+
+
+
+def feasible_t_range(A, eps, x, d, lower, upper, verbose=False) -> tuple[float, float]:
+    """
+    Compute feasible step range [t_min, t_max] for moving along direction d.
+    Ensures A(x + t d) >= eps and lower <= x + t d <= upper.
+
+    Parameters:
+        A (csr_matrix): Constraint matrix.
+        eps (float): Small positive value for constraints.
+        x (np.ndarray): Current point.
+        d (np.ndarray): Direction vector.
+        lower (np.ndarray): Lower bounds for each variable.
+        upper (np.ndarray): Upper bounds for each variable.
+        verbose (bool): If True, print additional information.
+    Returns:
+        tuple[float, float]: Feasible step range (t_min, t_max).
+    """
+    t_min, t_max = -np.inf, np.inf
+
+    # Linear constraints: A x >= eps
+    Ax = A.dot(x)
+    Ad = A.dot(d)
+    rhs = eps - Ax
+
+    pos = Ad > 1e-12
+    neg = Ad < -1e-12
+    if np.any(pos):
+        t_min = max(t_min, np.max(rhs[pos] / Ad[pos]))
+    if np.any(neg):
+        t_max = min(t_max, np.min(rhs[neg] / Ad[neg]))
+
+    if verbose:
+        print(f"\ncalc steps: \n min: {t_min} \n max: {t_max}")
+        if t_min > t_max:
+            print("First step issue")
+
+    # Box constraints: lower <= x + t d <= upper
+    pos = d > 1e-12
+    neg = d < -1e-12
+    if np.any(pos):
+        t_max = min(t_max, np.min((upper[pos] - x[pos]) / d[pos]))
+        t_min = max(t_min, np.max((lower[pos] - x[pos]) / d[pos]))
+    if np.any(neg):
+        t_max = min(t_max, np.min((lower[neg] - x[neg]) / d[neg]))
+        t_min = max(t_min, np.max((upper[neg] - x[neg]) / d[neg]))
+
+    if verbose:
+        print(f"\n2calc steps: \n min: {t_min} \n max: {t_max}")
+
+    return t_min, t_max
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+####################################################
+#
+# Old versions - ignore - deprecated
+#
+####################################################
+
+
+def feasible_t_range_org(A, eps, x, d, lower, upper, verbose=False):
+    """
+    Compute feasible step range [t_min, t_max] for moving along direction d.
+    Ensures A(x + t d) >= eps and lower <= x + t d <= upper.
+    """
+    t_min, t_max = -np.inf, np.inf
+
+    # (a) constraints A x >= eps  ->  A(x + t d) >= eps
+    Ad = A.dot(d)
+    Ax = A.dot(x)
+    rhs = eps - Ax
+
+    pos = Ad > 1e-12
+    neg = Ad < -1e-12
+        
+    if np.any(pos):
+        t_min = max(t_min, np.max(rhs[pos] / Ad[pos]))
+    if np.any(neg):
+        t_max = min(t_max, np.min(rhs[neg] / Ad[neg]))
+
+    if verbose:
+        print(f"\ncalc steps: \n min: {t_min} \n max: {t_max}")
+        if t_min > t_max:
+            print("First step issue")
+
+    # (b) box bounds lower <= x + t d <= upper
+    pos = d > 1e-12
+    neg = d < -1e-12
+    if np.any(pos):
+        t_max = min(t_max, np.min((upper[pos] - x[pos]) / d[pos]))
+        if verbose and np.min((upper[pos] - x[pos]) / d[pos]) < 0:
+            print(f"pos d: {(upper[pos] - x[pos]) / d[pos]}")
+    if np.any(neg):
+        t_min = max(t_min, np.min((lower[neg] - x[neg]) / d[neg]))     # pretty sure this should be np.min()
+        # if verbose and np.min((lower[neg] - x[neg]) / d[neg]) > 0:     # but still maybe rewrite all to check in a for loop
+        #     print(f"neg d: {(lower[neg] - x[neg]) / d[neg]}")
+
+    if verbose:
+        print(f"\n2calc steps: \n min: {t_min} \n max: {t_max}")
+    
+    return t_min, t_max

@@ -482,7 +482,7 @@ def cutting_dataframes(particles_df: pd.DataFrame, decays_df: pd.DataFrame, cut:
     all_important_particles_unique = list(set(all_important_particles))  # Remove duplicates
 
     if verbose:
-        print(f"No. of important particles (importance > {cut}): {len(important_particles)-1}")
+        print(f"\nNo. of important particles (importance > {cut}): {len(important_particles)-1}")
         print(f"Total importance score for important particles: {total_score-1:.9f}")
         print(f"All important particles (unique) with stable: {all_important_particles_unique}")
 
