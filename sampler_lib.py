@@ -250,54 +250,72 @@ def edge_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0, verbose: bo
 
 
 
-def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0,  verbose: bool = False) -> None:
+def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: str = "mass", cut: int = 0,  verbose: bool = False) -> None:
     """
     Perform a sampling study by generating data files with mass and branching ratio values sampled. Optionally apply a importance score cut to the particles in the dataframes.
     Parameters:
         p_df (pd.DataFrame): DataFrame containing the mass data.
         d_df (pd.DataFrame): DataFrame containing the decay data.
+        dir_name (str): Directory name to save the sampled data files.
+        case (str): Type of sampling to perform, either "mass", "br", or "both".
         cut (int): If non-zero, apply a cut to the dataframes before processing.
+        verbose (bool): If True, print detailed information during processing.
     """
 
+    if case.lower() not in ["mass", "br", "both"]:
+        raise ValueError("case must be either 'mass', 'br', or 'both'")
+
     if cut == 0:
-        dir_name = "Datafiles_sampled/sampling_studys/mass_sam_0"
+        dir_name = f"{dir_name}_0"
         p_df_cut = p_df
         d_df_cut = d_df
     else:
-        dir_name = f"Datafiles_sampled/sampling_studys/mass_sam_{cut:.0e}"
+        dir_name = f"{dir_name}_{cut:.0e}"
         p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, verbose=verbose)
 
 
-    n_samples = 100
+    n_samples = 1000
     p_dfs = [p_df_cut]
     d_dfs = [d_df_cut]
 
-    # for _ in range(n_samples):
-    #     if verbose:
-    #         print(f"\n\n\n-------Sampling iteration {_+1}-------\n\n\n")
-    #     else:
-    #         print(f"Sampling iteration {_+1}")
+    if case.lower() == "br":
+        for _ in range(n_samples):
+            if verbose:
+                print(f"\n\n\n-------Sampling iteration {_+1}-------\n\n\n")
+            else:
+                print(f"Sampling iteration {_+1}")
 
-    #     sampled_p_df = p_df_cut.copy()  
-    #     sampled_d_df = sample_branching_ratios(d_df_cut, rej_sampling=True, verbose=verbose)
+            sampled_p_df = p_df_cut.copy()  
+            sampled_d_df = sample_branching_ratios(d_df_cut, rej_sampling=True, verbose=False)
 
-    #     p_dfs.append(sampled_p_df)
-    #     d_dfs.append(sampled_d_df)
+            p_dfs.append(sampled_p_df)
+            d_dfs.append(sampled_d_df)
 
+    elif case.lower() == "mass":
+        sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples, verbose=verbose)
 
-    sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples, verbose=verbose)
+        for i in range(n_samples):
 
-    for i in range(n_samples):
-        if verbose:
-            print(f"\n\n\n-------Sampling iteration {i+1}-------\n\n\n")
-        else:
-            print(f"Sampling iteration {i+1}")
+            sampled_p_df = sampled_df_list[i]
+            sampled_d_df = d_df_cut.copy()  
 
-        sampled_p_df = sampled_df_list[i]
-        sampled_d_df = d_df_cut.copy()  
+            p_dfs.append(sampled_p_df)
+            d_dfs.append(sampled_d_df)
 
-        p_dfs.append(sampled_p_df)
-        d_dfs.append(sampled_d_df)
+    elif case.lower() == "both":
+        sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples, verbose=verbose)
+
+        for i in range(n_samples):
+            if verbose:
+                print(f"\n\n\n-------Sampling iteration {i+1}-------\n\n\n")
+            else:
+                print(f"Sampling iteration {i+1}")
+
+            sampled_p_df = sampled_df_list[i]
+            sampled_d_df = sample_branching_ratios(d_df_cut, rej_sampling=True, verbose=False)
+
+            p_dfs.append(sampled_p_df)
+            d_dfs.append(sampled_d_df)
 
 
     no_lists = len(p_dfs)
@@ -316,8 +334,8 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0,  verbos
 def sample_branching_ratios(d_df: pd.DataFrame, rej_sampling: bool = True, verbose: bool = False) -> pd.DataFrame:
     """
     Generate a decay DataFrame with branching ratios sampled according to their uncertainties.
-    Optionally implements rejection sampling to ensure physical validity. (Sum of BRs for each parent must be equal to 1).
-    Otherwise, samples each BR independently within its error range.
+    Optionally implements rejection sampling to ensure physical validity. (Sum of BRs for each parent must be equal to 1). If this fails after a set number of attempts, the original BRs are kept.
+    Otherwise, samples each BR independently within its error range, but ensures that the sampled BRs are between 0 and 1. Here the sum does not necessarily equal 1.
 
     Parameters:
         d_df (pd.DataFrame): DataFrame containing the decay data.
@@ -390,7 +408,13 @@ def sample_branching_ratios(d_df: pd.DataFrame, rej_sampling: bool = True, verbo
         else:
             sampled_brs = np.zeros_like(brs)
             for i in range(no_modes):
-                sampled_brs[i] = rd.uniform(brs[i] - br_err_n[i], brs[i] + br_err_p[i])
+                lower = brs[i] - br_err_n[i]
+                if lower < 0:
+                    lower = 0.0
+                upper = brs[i] + br_err_p[i]
+                if upper > 1:
+                    upper = 1.0
+                sampled_brs[i] = rd.uniform(lower, upper)
             if verbose:
                 print(f"Sampled BRs for Parent ID {id}: {sampled_brs.tolist()}")
             
@@ -474,7 +498,7 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
 
     csr_constraints = csr_matrix(constraints_matrix)
 
-    sampled_masses = hit_and_run_uniform(csr_constraints, 1e-09, lower_bounds, upper_bounds, masses, stable_particles_ids, scale, n_samples=n_samples, burn=1000, thin=5000, verbose=verbose)
+    sampled_masses = hit_and_run_uniform(csr_constraints, 1e-09, lower_bounds, upper_bounds, masses, stable_particles_ids, scale, n_samples=n_samples, burn=1000, thin=2000, verbose=verbose)
 
     if verbose:
         print(f"\n\n\nSampled masses shape: {sampled_masses.shape}")

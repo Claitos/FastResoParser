@@ -65,3 +65,4 @@ __pycache__/sampler_lib.cpython-312.pyc
 logs/edge.txt
 Datafiles_sampled/*
 logs/sampling.txt
+copy_farm.sh
