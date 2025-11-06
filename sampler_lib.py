@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 import parser
 import reverser
 from pathlib import Path
@@ -274,7 +275,7 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
         p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, verbose=verbose)
 
 
-    n_samples = 100
+    n_samples = 1000
     p_dfs = [p_df_cut]
     d_dfs = [d_df_cut]
 
@@ -506,8 +507,9 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
             print("Error: Some sampled masses are below the lower bounds!")
         if np.any(sampled_masses - upper_bounds > 0):
             print("Error: Some sampled masses are above the upper bounds!")
-        
-        plot_sample(sampled_masses, scale, lower_bounds, particle_id=2001034, p_df=p_df, dir_name="Plots")
+
+        plot_sample(sampled_masses, scale, lower_bounds, p_df=p_df, dir_name="Plots/Debug_sampling")
+        plot_sample_2(sampled_masses, scale, lower_bounds, dir_name="Plots/Debug_sampling")
 
     sampled_df_list = []
 
@@ -606,7 +608,7 @@ def hit_and_run_uniform(A, eps, lower, upper, x0, stable_ids, scale, n_samples=2
         if step >= burn and ((step - burn) % thin == 0):
             if scale_coordinates:
                 if verbose and ((step - burn) % (10*thin) == 0):
-                    ax.hist(x, bins=10, alpha=0.2, label=f"step {step}")
+                    ax.hist(x, bins=10, alpha=0.1, label=f"step {step}")
                 x_sample = x * scale + lower_orig
                 samples.append(x_sample.copy())
             else:
@@ -618,7 +620,7 @@ def hit_and_run_uniform(A, eps, lower, upper, x0, stable_ids, scale, n_samples=2
 
     ax.legend()
     if verbose:
-        fig.savefig("Plots/debug_sampling.png")
+        fig.savefig("Plots/Debug_sampling/debug_sampling.png")
     plt.close(fig)
 
     return np.array(samples)
@@ -683,7 +685,21 @@ def feasible_t_range(A, eps, x, d, lower, upper, verbose=False) -> tuple[float, 
 
 
 
-def plot_sample(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, particle_id: int, p_df: pd.DataFrame, dir_name: str) -> None:
+
+
+
+
+
+################################################################
+#
+# Functions for sampling studies to plot and debug
+#
+################################################################
+
+
+
+
+def plot_sample(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, p_df: pd.DataFrame, dir_name: str) -> None:
     """
     Plot histogram of sampled masses for a specific particle.
 
@@ -694,22 +710,79 @@ def plot_sample(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, parti
         dir_name (str): Directory name to save the plot.
     """
 
-    particle_index = p_df.index[p_df["ID"] == particle_id][0]
-    sampled_masses = samples[:, particle_index]
+    for i in range(10):
+        particle_ids = p_df["ID"].values[(i)*10:(i+1)*10]
+        plt.figure(figsize=(8, 6))
 
-    sampled_masses_trans = (sampled_masses - lower[particle_index]) / scale[particle_index]
+        for particle_id in particle_ids:
+            particle_index = p_df.index[p_df["ID"] == particle_id][0]
+            particle_name = p_df.loc[p_df["ID"] == particle_id, "Name"].values[0]
+            sampled_masses = samples[:, particle_index]
 
-    plt.figure(figsize=(8, 6))
-    plt.hist(sampled_masses_trans, bins=30, alpha=0.7, color='blue', edgecolor='black')
-    plt.title(f"Sampled Mass Distribution for Particle ID {particle_id}")
-    plt.xlabel("Mass (GeV)")
-    plt.ylabel("Frequency")
-    plt.grid(True)
+            sampled_masses_trans = (sampled_masses - lower[particle_index]) / scale[particle_index]
+            mean = sampled_masses_trans.mean()
 
-    Path(dir_name).mkdir(parents=True, exist_ok=True)
-    plt.savefig(f"{dir_name}/sampled_mass_particle_{particle_id}.png")
+            plt.hist(sampled_masses_trans, bins=30, alpha=0.1, label=f"Particle ID {particle_name} with $\mu={mean:.2f}$")
+
+        plt.title(f"Sampled Mass Distribution for Particles")
+        plt.xlabel("Mass transformed to [0, 1]")
+        plt.xlim(0, 1)
+        plt.ylabel("Frequency")
+        plt.grid(True)
+        plt.legend()
+
+        Path(dir_name).mkdir(parents=True, exist_ok=True)
+        plt.savefig(f"{dir_name}/samples/sampled_mass_particles_{i}.png")
+        plt.close()
+
+
+
+def plot_sample_2(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, dir_name: str) -> None:
+
+    # Shape: (100, 739)
+    n_samples, n_particles = samples.shape
+
+    means = []
+
+    for i in range(n_particles):    # len(samples.T[i]) = 739 = n_particles
+        print(f"samples: {samples.T[i][:5]} with lower: {lower[i]:.3f} and scale: {scale[i]:.3f}")
+        samples.T[i] = (samples.T[i] - lower[i]) / scale[i]
+        mean = samples.T[i].mean()
+        means.append(mean)
+        
+
+    # Simulated data
+    x = np.tile(np.arange(n_particles), n_samples)
+    y = samples.flatten()
+
+    # Create 2D histogram
+    plt.figure(figsize=(20, 6))
+    counts, xedges, yedges, im = plt.hist2d(
+        x, y,
+        bins=[n_particles, 30],     # 800 bins in x, 30 bins in y
+        range=[[0, n_particles], [0, 1]],
+        cmap='viridis',
+        norm=LogNorm()
+    )
+
+    plt.plot(means, color='red', linestyle='--', label='Mean Value', linewidth=1)
+    plt.legend()
+
+    mean_of_means = np.mean(means)
+    plt.text(n_particles * 0.8, 0.9, f'Overall Mean: {mean_of_means:.3f}', color='black', fontsize=12, bbox=dict(facecolor='white', alpha=0.5))
+
+    # Add color bar for frequency
+    cbar = plt.colorbar(im)
+    cbar.set_label('Frequency')
+
+    # Labels and title
+    plt.xlabel('Particle species')
+    plt.ylabel('Mass transformed to [0, 1]')
+    plt.title('2D Histogram of Particle Species vs Value')
+
+    plt.tight_layout()
+    plt.savefig(f"{dir_name}/sampled_mass_particles2.png")
     plt.close()
-
 
 
 
