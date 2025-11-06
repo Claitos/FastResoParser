@@ -5,7 +5,7 @@ import parser
 import reverser
 from pathlib import Path
 import random as rd
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, diags
 
 
 ################################################################
@@ -274,7 +274,7 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
         p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, verbose=verbose)
 
 
-    n_samples = 1000
+    n_samples = 100
     p_dfs = [p_df_cut]
     d_dfs = [d_df_cut]
 
@@ -463,7 +463,7 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
     upper_bounds = masses + mass_err_p
 
     scale = upper_bounds - lower_bounds # scale for each mass bounds to sample direction vector later
-    scale = np.clip(scale, a_min=1e-5, a_max=None)  # avoid zero scale for stable particles
+    scale = np.clip(scale, a_min=1e-12, a_max=None)  # avoid zero scale for stable particles
 
     if verbose:
         print(f"Initial masses: {masses.tolist()}")
@@ -498,7 +498,7 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
 
     csr_constraints = csr_matrix(constraints_matrix)
 
-    sampled_masses = hit_and_run_uniform(csr_constraints, 1e-09, lower_bounds, upper_bounds, masses, stable_particles_ids, scale, n_samples=n_samples, burn=1000, thin=2000, verbose=verbose)
+    sampled_masses = hit_and_run_uniform(csr_constraints, 1e-09, lower_bounds, upper_bounds, masses, stable_particles_ids, scale, n_samples=n_samples, burn=1000, thin=2000, scale_coordinates=True, verbose=verbose)
 
     if verbose:
         print(f"\n\n\nSampled masses shape: {sampled_masses.shape}")
@@ -506,6 +506,8 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
             print("Error: Some sampled masses are below the lower bounds!")
         if np.any(sampled_masses - upper_bounds > 0):
             print("Error: Some sampled masses are above the upper bounds!")
+        
+        plot_sample(sampled_masses, scale, lower_bounds, particle_id=2001034, p_df=p_df, dir_name="Plots")
 
     sampled_df_list = []
 
@@ -519,7 +521,7 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
 
 
 
-def hit_and_run_uniform(A, eps, lower, upper, x0, stable_ids, scale, n_samples=20, burn=5, thin=1, verbose=False) -> np.ndarray:
+def hit_and_run_uniform(A, eps, lower, upper, x0, stable_ids, scale, n_samples=20, burn=5, thin=1, scale_coordinates: bool=False, verbose: bool=False) -> np.ndarray:
     """
     Uniform hit-and-run sampler inside convex region:
         A x >= eps, lower <= x <= upper
@@ -550,11 +552,38 @@ def hit_and_run_uniform(A, eps, lower, upper, x0, stable_ids, scale, n_samples=2
         A = csr_matrix(A)
 
     x = x0.copy()
+    lower_orig = lower.copy()
+
+    if scale_coordinates:
+        x = (x - lower) / scale
+        eps = eps - A @ lower
+        A = A @ diags(scale)
+        lower = np.zeros_like(lower)
+        upper = np.ones_like(upper)
+        if verbose:
+            print("\nScaling coordinates to unit cube.")
+            print(f"New x0: \n{x}")
+            print(f"New lower bounds: \n{lower}")
+            print(f"New upper bounds: \n{upper}")
+            print(f"New eps with length {len(eps)}: \n{eps}\n")
+            print(f"New A matrix:\n{A.toarray()}\n")
+            print("Check feasibility in transformed-space:", np.all(A @ x >= eps), np.all((0 <= x) & (x <= 1)))
+            violations = (A @ x) - eps
+            print("Min constraint residual (should be >=0):", np.min(violations))
+            bad = np.where(violations < 0)[0]
+            print("Example bad constraints:", bad[:5])
+            print("A[bad] @ x =", (A @ x)[bad])
+            print("eps[bad]    =", eps[bad], "\n\n")
+
     samples = []
+    fig, ax = plt.subplots(1,1, figsize=(6,6))
 
     for step in range(n_samples * thin + burn):
         # 1. Choose random direction (normalize to unit length)
-        d = np.random.normal(size=n, scale=scale)
+        if scale_coordinates:
+            d = np.random.normal(size=n)
+        else:
+            d = np.random.normal(size=n, scale=scale)
         for id in stable_ids:
             d[id] = 0.0
         d /= np.linalg.norm(d)
@@ -575,10 +604,22 @@ def hit_and_run_uniform(A, eps, lower, upper, x0, stable_ids, scale, n_samples=2
 
         # 5. Collect
         if step >= burn and ((step - burn) % thin == 0):
-            samples.append(x.copy())
+            if scale_coordinates:
+                if verbose and ((step - burn) % (10*thin) == 0):
+                    ax.hist(x, bins=10, alpha=0.2, label=f"step {step}")
+                x_sample = x * scale + lower_orig
+                samples.append(x_sample.copy())
+            else:
+                samples.append(x.copy())
 
+          
         if verbose and (step + 1) % thin == 0:
             print(f"Iteration {step+1}/{n_samples*thin + burn}")
+
+    ax.legend()
+    if verbose:
+        fig.savefig("Plots/debug_sampling.png")
+    plt.close(fig)
 
     return np.array(samples)
 
@@ -638,6 +679,36 @@ def feasible_t_range(A, eps, x, d, lower, upper, verbose=False) -> tuple[float, 
 
 
 
+
+
+
+
+def plot_sample(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, particle_id: int, p_df: pd.DataFrame, dir_name: str) -> None:
+    """
+    Plot histogram of sampled masses for a specific particle.
+
+    Parameters:
+        samples (np.ndarray): Array of sampled points.
+        particle_id (int): ID of the particle to plot.
+        p_df (pd.DataFrame): DataFrame containing the mass data.
+        dir_name (str): Directory name to save the plot.
+    """
+
+    particle_index = p_df.index[p_df["ID"] == particle_id][0]
+    sampled_masses = samples[:, particle_index]
+
+    sampled_masses_trans = (sampled_masses - lower[particle_index]) / scale[particle_index]
+
+    plt.figure(figsize=(8, 6))
+    plt.hist(sampled_masses_trans, bins=30, alpha=0.7, color='blue', edgecolor='black')
+    plt.title(f"Sampled Mass Distribution for Particle ID {particle_id}")
+    plt.xlabel("Mass (GeV)")
+    plt.ylabel("Frequency")
+    plt.grid(True)
+
+    Path(dir_name).mkdir(parents=True, exist_ok=True)
+    plt.savefig(f"{dir_name}/sampled_mass_particle_{particle_id}.png")
+    plt.close()
 
 
 

@@ -3,9 +3,6 @@ decays_PDG2016Plus_massorder_original.dat
 readme_original.txt
 decays_PDG2016Plus_massorder_reversed.dat
 decays_QM2016Plus_massorder.dat
-Plots/total_branching_ratio_to_pionmin.png
-Plots/total_branching_ratio_to_pionplu.png
-Plots/total_branching_ratio_to_pions.png
 .gitignore
 Plots/importance_score_all_particles.png
 Plots/importance_score_all_particles_both.png
@@ -36,21 +33,15 @@ PDG-related/List.txt
 test.txt
 decays_PDG2016Plus_massorder_err.dat
 calculator.ipynb
-Plots/pion_production.png
-Plots/PDG-API/errors_plot.png
 cuts_fine/*
 cuts_finer/*
 cuts_mass/*
-Plots/importance_cutoff_study.png
-Plots/norm_importance_score_all_particles.png
 output.txt
 Dataframe_errors.txt
 Database/pdg-2025-v0.2.1.sqlite
 .gitignore
-Plots/importance_cutoff_study_test.png
 Datalayout/*
 cuts_study/*
-Plots/PDG-API/errors_plot_all.png
 output_decay.txt
 logs/part_found.txt
 logs/products.txt
@@ -58,11 +49,10 @@ logs/products_unmatched.txt
 .gitignore
 logs/part_found copy.txt
 logs/whitespace.txt
-Plots/PDG-API/errors_decay.png
-Plots/PDG-API/errors_decay_all.png
 logs/output_degeneracy.txt
 __pycache__/sampler_lib.cpython-312.pyc
 logs/edge.txt
 Datafiles_sampled/*
 logs/sampling.txt
 copy_farm.sh
+Plots/*
