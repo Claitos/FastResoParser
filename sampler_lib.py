@@ -741,19 +741,20 @@ def plot_sample_2(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, dir
 
     # Shape: (100, 739)
     n_samples, n_particles = samples.shape
+    sampled_masses = samples.copy()
 
     means = []
 
     for i in range(n_particles):    # len(samples.T[i]) = 739 = n_particles
-        print(f"samples: {samples.T[i][:5]} with lower: {lower[i]:.3f} and scale: {scale[i]:.3f}")
-        samples.T[i] = (samples.T[i] - lower[i]) / scale[i]
-        mean = samples.T[i].mean()
+        print(f"samples: {sampled_masses.T[i][:5]} with lower: {lower[i]:.3f} and scale: {scale[i]:.3f}")
+        sampled_masses.T[i] = (sampled_masses.T[i] - lower[i]) / scale[i]
+        mean = sampled_masses.T[i].mean()
         means.append(mean)
         
 
     # Simulated data
     x = np.tile(np.arange(n_particles), n_samples)
-    y = samples.flatten()
+    y = sampled_masses.flatten()
 
     # Create 2D histogram
     plt.figure(figsize=(20, 6))

@@ -363,7 +363,7 @@ def normalize_scores(scores: list) -> list:
     :param scores (list): The list of importance scores to normalize.
     :return norm_scores (list): The normalized importance scores.
     """
-    pion_no = 735
+    pion_no = 735   # 735 for PDG2016Plus,  1514 for QM2016Plus
     scores[pion_no] = 0.0  # Set the importance score for pions to 0.0
     list_np = np.array(scores)
     sum = np.sum(list_np)

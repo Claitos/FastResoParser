@@ -53,10 +53,13 @@ def reverser_routine_new(dir_name: str = "cuts_test", no_lists: int = 1):
 
 def main():
 
-    cut = 1e-09
-    dir_name = "cuts_pi+stable"
-    inputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}.dat"
-    outputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}_reversed.dat"
+    # cut = 1e-09
+    # dir_name = "cuts_pi+stable"
+    # inputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}.dat"
+    # outputfile = f"{dir_name}/decays_PDG2016Plus_massorder_{cut}_reversed.dat"
+
+    inputfile = f"decays_QM2016Plus_massorder.dat"
+    outputfile = f"decays_QM2016Plus_massorder_reversed.dat"
 
     # Read the file and reverse the lines
     with open(inputfile, "r") as file:
