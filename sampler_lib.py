@@ -275,7 +275,7 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
         p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, verbose=verbose)
 
 
-    n_samples = 1000
+    n_samples = 1001
     p_dfs = [p_df_cut]
     d_dfs = [d_df_cut]
 
@@ -293,7 +293,7 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
             d_dfs.append(sampled_d_df)
 
     elif case.lower() == "mass":
-        sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples, verbose=verbose)
+        sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples-1, verbose=verbose)
 
         for i in range(n_samples):
 
@@ -304,7 +304,7 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
             d_dfs.append(sampled_d_df)
 
     elif case.lower() == "both":
-        sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples, verbose=verbose)
+        sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples-1, verbose=verbose)
 
         for i in range(n_samples):
             if verbose:
@@ -473,6 +473,53 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
         #print(f"Mass scales : {(upper_bounds - lower_bounds).tolist()}")
         print(f"Scale: {scale.tolist()} \n")
 
+    csr_constraints = constraint_matrix_constructor(p_df, d_df, stable_particles, verbose=verbose)
+
+    sampled_masses = hit_and_run_uniform(csr_constraints, 1e-09, lower_bounds, upper_bounds, masses, stable_particles_ids, scale, n_samples=n_samples, burn=1000, thin=2000, scale_coordinates=True, verbose=verbose)
+
+    mass_edges_n, mass_edges_p = mass_edges(p_df, d_df)
+
+    mean_sampled_masses = mean_sample(sampled_masses, scale, lower_bounds)
+
+    if verbose:
+        print(f"\n\n\nSampled masses shape: {sampled_masses.shape}")
+        if np.any(sampled_masses - lower_bounds < 0):
+            print("Error: Some sampled masses are below the lower bounds!")
+        if np.any(sampled_masses - upper_bounds > 0):
+            print("Error: Some sampled masses are above the upper bounds!")
+
+        plot_sample(sampled_masses, scale, lower_bounds, p_df=p_df, dir_name="Plots/Debug_sampling")
+        plot_sample_2(sampled_masses, scale, lower_bounds, dir_name="Plots/Debug_sampling", edges=(mass_edges_n, mass_edges_p))
+
+    sampled_df_list = []
+
+    for i in range(n_samples):
+        sampled_p_df = p_df.copy()  # create a copy to avoid modifying the original DataFrame
+        sampled_p_df["Mass (GeV)"] = sampled_masses[i]
+        sampled_df_list.append(sampled_p_df)
+
+    mass_mean_p_df = p_df.copy()
+    mass_mean_p_df["Mass (GeV)"] = mean_sampled_masses
+    sampled_df_list.append(mass_mean_p_df)
+
+    return sampled_df_list
+
+
+
+def constraint_matrix_constructor(p_df: pd.DataFrame, d_df: pd.DataFrame, stable_particles: list[int], verbose: bool = False) -> csr_matrix:
+    """
+    Construct the constraint matrix for mass conservation.
+
+    Parameters:
+        p_df (pd.DataFrame): DataFrame containing the mass data.
+        d_df (pd.DataFrame): DataFrame containing the decay data.
+        stable_particles (list[int]): List of stable particle IDs.
+        verbose (bool): If True, print additional information.
+
+    Returns:
+        csr_matrix: Constraint matrix in CSR format.
+    """
+
     constraints_matrix = np.zeros((len(d_df), len(p_df)))
 
     for i, row in d_df.iterrows():
@@ -499,26 +546,7 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
 
     csr_constraints = csr_matrix(constraints_matrix)
 
-    sampled_masses = hit_and_run_uniform(csr_constraints, 1e-09, lower_bounds, upper_bounds, masses, stable_particles_ids, scale, n_samples=n_samples, burn=1000, thin=2000, scale_coordinates=True, verbose=verbose)
-
-    if verbose:
-        print(f"\n\n\nSampled masses shape: {sampled_masses.shape}")
-        if np.any(sampled_masses - lower_bounds < 0):
-            print("Error: Some sampled masses are below the lower bounds!")
-        if np.any(sampled_masses - upper_bounds > 0):
-            print("Error: Some sampled masses are above the upper bounds!")
-
-        plot_sample(sampled_masses, scale, lower_bounds, p_df=p_df, dir_name="Plots/Debug_sampling")
-        plot_sample_2(sampled_masses, scale, lower_bounds, dir_name="Plots/Debug_sampling")
-
-    sampled_df_list = []
-
-    for i in range(n_samples):
-        sampled_p_df = p_df.copy()  # create a copy to avoid modifying the original DataFrame
-        sampled_p_df["Mass (GeV)"] = sampled_masses[i]
-        sampled_df_list.append(sampled_p_df)
-
-    return sampled_df_list
+    return csr_constraints
 
 
 
@@ -681,8 +709,62 @@ def feasible_t_range(A, eps, x, d, lower, upper, verbose=False) -> tuple[float, 
 
 
 
+def mass_edges(p_df: pd.DataFrame, d_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate the mass edges (upper and lower bounds) for each particle.
+
+    Parameters:
+        p_df (pd.DataFrame): DataFrame containing the mass data.
+        d_df (pd.DataFrame): DataFrame containing the decay data.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Lower and upper bounds for each particle.
+    """
+
+    p_df_edge_p = get_edges(p_df, d_df, identifier="mass", edge_id="+", verbose=False)
+    p_df_edge_n = get_edges(p_df, d_df, identifier="mass", edge_id="-", verbose=False)
+
+    mass_p = p_df_edge_p["Mass (GeV)"].values
+    mass_n = p_df_edge_n["Mass (GeV)"].values
+
+    return mass_n, mass_p
 
 
+
+
+def mean_sample(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray) -> np.ndarray:
+    """
+    Compute the mean of the sampled masses for each particle.
+
+    Parameters:
+        samples (np.ndarray): Array of sampled points.
+        scale (np.ndarray): Scale values for transformation.
+        lower (np.ndarray): Lower bounds for transformation.
+
+    Returns:
+        np.ndarray: Mean of the sampled masses for each particle.
+    """
+
+    # Shape: (100, 739)
+    n_samples, n_particles = samples.shape
+    sampled_masses = samples.copy()
+
+    means = []
+
+    for i in range(n_particles):    # len(samples.T[i]) = 739 = n_particles
+        print(f"samples: {sampled_masses.T[i][:5]} with lower: {lower[i]:.3f} and scale: {scale[i]:.3f}")
+        sampled_masses.T[i] = (sampled_masses.T[i] - lower[i]) / scale[i]
+        mean = sampled_masses.T[i].mean()
+        means.append(mean)
+
+    
+    means_np = samples.mean(axis=0)
+    means_rescaled = means * scale + lower
+
+    print(f"\nMean sampled masses (original scale): {means_rescaled.tolist()}")
+    print(f"\nMean sampled masses (transformed scale): {means_np.tolist()}")
+
+    return means_rescaled
 
 
 
@@ -722,7 +804,7 @@ def plot_sample(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, p_df:
             sampled_masses_trans = (sampled_masses - lower[particle_index]) / scale[particle_index]
             mean = sampled_masses_trans.mean()
 
-            plt.hist(sampled_masses_trans, bins=30, alpha=0.1, label=f"Particle ID {particle_name} with $\mu={mean:.2f}$")
+            plt.hist(sampled_masses_trans, bins=30, alpha=0.1, label=fr"Particle ID {particle_name} with $\mu={mean:.2f}$")
 
         plt.title(f"Sampled Mass Distribution for Particles")
         plt.xlabel("Mass transformed to [0, 1]")
@@ -737,13 +819,18 @@ def plot_sample(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, p_df:
 
 
 
-def plot_sample_2(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, dir_name: str) -> None:
+def plot_sample_2(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, dir_name: str, edges: tuple[np.ndarray, np.ndarray]) -> None:
 
     # Shape: (100, 739)
     n_samples, n_particles = samples.shape
     sampled_masses = samples.copy()
 
     means = []
+
+    mass_n, mass_p = edges
+
+    mass_p_scaled = (mass_p - lower) / scale
+    mass_n_scaled = (mass_n - lower) / scale
 
     for i in range(n_particles):    # len(samples.T[i]) = 739 = n_particles
         print(f"samples: {sampled_masses.T[i][:5]} with lower: {lower[i]:.3f} and scale: {scale[i]:.3f}")
@@ -767,6 +854,8 @@ def plot_sample_2(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, dir
     )
 
     plt.plot(means, color='red', linestyle='--', label='Mean Value', linewidth=1)
+    plt.plot(mass_p_scaled, color='pink', linestyle='-', label='Mass Edge +', linewidth=1)
+    plt.plot(mass_n_scaled, color='orange', linestyle='-', label='Mass Edge -', linewidth=1)
     plt.legend()
 
     mean_of_means = np.mean(means)
@@ -782,14 +871,8 @@ def plot_sample_2(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, dir
     plt.title('2D Histogram of Particle Species vs Value')
 
     plt.tight_layout()
-    plt.savefig(f"{dir_name}/sampled_mass_particles2.png")
+    plt.savefig(f"{dir_name}/sampled_mass_particles_edges.png")
     plt.close()
-
-
-
-
-
-
 
 
 
