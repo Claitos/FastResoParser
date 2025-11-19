@@ -480,7 +480,7 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
 
     mass_edges_n, mass_edges_p = mass_edges(p_df, d_df)
 
-    initial_point = set_initial_feasible_point(masses, mass_edges_n, mass_edges_p, where="neg_edge")
+    initial_point = set_initial_feasible_point(masses, mass_edges_n, mass_edges_p, where="neg_edge", verbose=verbose)
 
     sampled_masses = hit_and_run_uniform(csr_constraints, 1e-09, lower_bounds, upper_bounds, initial_point, stable_particles_ids, scale, n_samples=n_samples, burn=1000, thin=2000, scale_coordinates=True, verbose=verbose)
 
@@ -556,7 +556,7 @@ def constraint_matrix_constructor(p_df: pd.DataFrame, d_df: pd.DataFrame, stable
 
 
 
-def set_initial_feasible_point(org_masses: np.ndarray, edge_neg: np.ndarray, edge_pos: np.ndarray, where: str = "org") -> np.ndarray:
+def set_initial_feasible_point(org_masses: np.ndarray, edge_neg: np.ndarray, edge_pos: np.ndarray, where: str = "org", verbose: bool = False) -> np.ndarray:
     """
     Set an initial feasible point within the bounds defined by edge_neg and edge_pos.
 
@@ -579,6 +579,9 @@ def set_initial_feasible_point(org_masses: np.ndarray, edge_neg: np.ndarray, edg
         intial_mases = edge_neg.copy()
     elif where == "pos_edge":
         intial_mases = edge_pos.copy()
+
+    if verbose:
+        print(f"Initial feasible point set at '{where}': {intial_mases.tolist()}")
 
     return intial_mases
 
