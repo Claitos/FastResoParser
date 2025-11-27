@@ -5,4 +5,4 @@ It also contains a script to sample values of the resonance parameters according
 This repository also provides a small script the reverse the output data files. This reversed file can be needed for FastReso to run.\
 The notebooks explain and use the functionalities that are implemented in the scripts.
 
-This repository is mainly used in my ongoing master thesis regarding the influence of resonance parameter uncertainties on the low transverse momentum particle excess.
+This repository is mainly used in my ongoing master thesis regarding the influence of resonance parameter uncertainties on the low transverse momentum pion excess.
