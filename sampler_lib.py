@@ -480,7 +480,7 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
 
     mass_edges_n, mass_edges_p = mass_edges(p_df, d_df)
 
-    initial_point = set_initial_feasible_point(masses, mass_edges_n, mass_edges_p, where="neg_edge", verbose=verbose)
+    initial_point = set_initial_feasible_point(masses, mass_edges_n, mass_edges_p, where="pos_edge", verbose=verbose)
 
     sampled_masses = hit_and_run_uniform(csr_constraints, 1e-09, lower_bounds, upper_bounds, initial_point, stable_particles_ids, scale, n_samples=n_samples, burn=1000, thin=2000, scale_coordinates=True, verbose=verbose)
 
@@ -574,11 +574,16 @@ def set_initial_feasible_point(org_masses: np.ndarray, edge_neg: np.ndarray, edg
         raise ValueError("where must be either 'org', 'neg_edge', or 'pos_edge'")
 
     intial_mases = org_masses.copy()
+
+    err_neg = org_masses - edge_neg
+    err_pos = edge_pos - org_masses
     
+    scaling_factor = 0.99   # to avoid being exactly on the edge -> can lead to numerical issues during sampling
+
     if where == "neg_edge":
-        intial_mases = edge_neg.copy()
+        intial_mases -= err_neg * scaling_factor
     elif where == "pos_edge":
-        intial_mases = edge_pos.copy()
+        intial_mases += err_pos * scaling_factor
 
     if verbose:
         print(f"Initial feasible point set at '{where}': {intial_mases.tolist()}")
@@ -908,7 +913,7 @@ def plot_sample_2(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, dir
     plt.title('2D Histogram of Particle Species vs Value')
 
     plt.tight_layout()
-    plt.savefig(f"{dir_name}/sampled_mass_particles_edges2.png")
+    plt.savefig(f"{dir_name}/sampled_mass_particles_edges4.png")
     plt.close()
 
 

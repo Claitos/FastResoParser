@@ -48,6 +48,11 @@ def parse_to_df(file_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
                     "ProductIDs": [int(p) for p in parts[3:] if p.strip() != ""]
                 }
                 decays.append(decay)
+            else:
+                # Invalid line format, skip or handle error
+                print(f"Warning: Skipping invalid line format: {line.strip()}")
+                print(f"Parts: {parts} and length: {len(parts)}")
+                continue
 
     # Convert to DataFrames
     particles_df = pd.DataFrame(particles)

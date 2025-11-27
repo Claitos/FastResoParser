@@ -57,3 +57,4 @@ logs/sampling.txt
 copy_farm.sh
 Plots/*
 decays_QM2016Plus_massorder_reversed.dat
+decays_PDG2016Plus_massorder_f0.dat
