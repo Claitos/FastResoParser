@@ -17,7 +17,7 @@ from scipy.sparse import csr_matrix, diags
 
 
 
-def mass_conservation(p_df: pd.DataFrame, d_df: pd.DataFrame, edge_id: str = "+", verbose: bool = False) -> pd.DataFrame:
+def mass_conservation(p_df: pd.DataFrame, d_df: pd.DataFrame, edge_id: str = "+", verbose: bool = False, scaling_factor: float = 1.0) -> pd.DataFrame:
     """
     Check mass conservation for each decay channel.
     If the sum of the masses of the decay products exceeds the mass of the parent particle, correct the mass of the mother to the sum of the daughter masses in the case of "-".
@@ -49,10 +49,10 @@ def mass_conservation(p_df: pd.DataFrame, d_df: pd.DataFrame, edge_id: str = "+"
         parent_mass = p_df.loc[p_df["ID"] == parent_id, "Mass (GeV)"].values[0]
         decay_product_masses = p_df.loc[p_df["ID"].isin(decay_product_ids), "Mass (GeV)"].values
 
-        parent_mass_err_p = p_df.loc[p_df["ID"] == parent_id, "Mass Error Pos (GeV)"].values[0]
-        parent_mass_err_n = p_df.loc[p_df["ID"] == parent_id, "Mass Error Neg (GeV)"].values[0]
-        decay_product_masses_err_p = p_df.loc[p_df["ID"].isin(decay_product_ids), "Mass Error Pos (GeV)"].values.tolist()
-        decay_product_masses_err_n = p_df.loc[p_df["ID"].isin(decay_product_ids), "Mass Error Neg (GeV)"].values.tolist()
+        parent_mass_err_p = p_df.loc[p_df["ID"] == parent_id, "Mass Error Pos (GeV)"].values[0] * scaling_factor
+        parent_mass_err_n = p_df.loc[p_df["ID"] == parent_id, "Mass Error Neg (GeV)"].values[0] * scaling_factor
+        decay_product_masses_err_p = (p_df.loc[p_df["ID"].isin(decay_product_ids), "Mass Error Pos (GeV)"].values * scaling_factor).tolist()
+        decay_product_masses_err_n = (p_df.loc[p_df["ID"].isin(decay_product_ids), "Mass Error Neg (GeV)"].values * scaling_factor).tolist()
 
         if verbose:
             print(f"\nChecking Parent ID {parent_id} with Decay Products {decay_product_ids}")
@@ -107,7 +107,7 @@ def mass_conservation(p_df: pd.DataFrame, d_df: pd.DataFrame, edge_id: str = "+"
 
 
 
-def get_edges(p_df: pd.DataFrame, d_df: pd.DataFrame, identifier: str = "mass", edge_id: str = "+", verbose: bool = False) -> pd.DataFrame:
+def get_edges(p_df: pd.DataFrame, d_df: pd.DataFrame, identifier: str = "mass", edge_id: str = "+", verbose: bool = False, scaling_factor: float = 1.0) -> pd.DataFrame:
     """
     Calculate the mass edge and replace the original mass values. Edge is determined by adding or subtracting the error. Only unstable particles are affected.
 
@@ -135,11 +135,11 @@ def get_edges(p_df: pd.DataFrame, d_df: pd.DataFrame, identifier: str = "mass", 
     bool_series = p_df["ID"].isin(stable_particles)
 
     if identifier == "mass":
-        err_p = p_df["Mass Error Pos (GeV)"]
-        err_n = p_df["Mass Error Neg (GeV)"]
+        err_p = p_df["Mass Error Pos (GeV)"] * scaling_factor
+        err_n = p_df["Mass Error Neg (GeV)"] * scaling_factor
     elif identifier == "width":
-        err_p = p_df["Width Error Pos (GeV)"]
-        err_n = p_df["Width Error Neg (GeV)"]
+        err_p = p_df["Width Error Pos (GeV)"] * scaling_factor
+        err_n = p_df["Width Error Neg (GeV)"] * scaling_factor
 
     p_df_edges = p_df.copy()   # create a copy to avoid modifying the original DataFrame
 
@@ -156,14 +156,14 @@ def get_edges(p_df: pd.DataFrame, d_df: pd.DataFrame, identifier: str = "mass", 
 
 
     if identifier == "mass":
-        p_df_edges = mass_conservation(p_df_edges, d_df, edge_id=edge_id, verbose=verbose)
+        p_df_edges = mass_conservation(p_df_edges, d_df, edge_id=edge_id, verbose=verbose, scaling_factor=scaling_factor)
 
     return p_df_edges
 
 
 
 
-def br_edge(d_df: pd.DataFrame, edge_id: str = "+") -> pd.DataFrame:
+def br_edge(d_df: pd.DataFrame, edge_id: str = "+", scaling_factor: float = 1.0) -> pd.DataFrame:
     """
     Calculate the branching ratio edge and replace the original branching ratio values. Edge is determined by adding or subtracting the error.
     
@@ -178,8 +178,8 @@ def br_edge(d_df: pd.DataFrame, edge_id: str = "+") -> pd.DataFrame:
     if edge_id not in ["+", "-"]:
         raise ValueError("edge_id must be either '+' or '-'")
 
-    err_p = d_df["BR Error Pos"].values
-    err_n = d_df["BR Error Neg"].values
+    err_p = d_df["BR Error Pos"].values * scaling_factor
+    err_n = d_df["BR Error Neg"].values * scaling_factor
     brs = d_df["BranchingRatio"].values
 
     d_df_br = d_df.copy()   # create a copy to avoid modifying the original DataFrame
@@ -205,23 +205,27 @@ def edge_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0, verbose: bo
     """
 
     if cut == 0:
-        dir_name = "Datafiles_sampled/edge_study_final2"
+        dir_name = "Datafiles_sampled/edge_studys/edge_study_nsigma_0"
         p_df_cut = p_df
         d_df_cut = d_df
     else:
-        dir_name = f"Datafiles_sampled/edge_study_final2_{cut:.0e}"
+        dir_name = f"Datafiles_sampled/edge_studys/edge_study_nsigma_{cut:.0e}"
         p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, verbose=True)
 
+    p_dfs = [p_df_cut]
+    d_dfs = [d_df_cut]
+    scaling_factors = [1.0, 2.0, 3.0]
 
-    mass_p_df = get_edges(p_df_cut, d_df_cut, identifier="mass", edge_id="+", verbose=verbose)
-    mass_n_df = get_edges(p_df_cut, d_df_cut, identifier="mass", edge_id="-", verbose=verbose)
-    decay_p_df = get_edges(p_df_cut, d_df_cut, identifier="width", edge_id="+", verbose=verbose)
-    decay_n_df = get_edges(p_df_cut, d_df_cut, identifier="width", edge_id="-", verbose=verbose)
-    br_p_df = br_edge(d_df_cut, edge_id="+")
-    br_n_df = br_edge(d_df_cut, edge_id="-")
+    for scaling_factor in scaling_factors:
+        mass_p_df = get_edges(p_df_cut, d_df_cut, identifier="mass", edge_id="+", verbose=verbose, scaling_factor=scaling_factor)
+        mass_n_df = get_edges(p_df_cut, d_df_cut, identifier="mass", edge_id="-", verbose=verbose, scaling_factor=scaling_factor)
+        decay_p_df = get_edges(p_df_cut, d_df_cut, identifier="width", edge_id="+", verbose=verbose, scaling_factor=scaling_factor)
+        decay_n_df = get_edges(p_df_cut, d_df_cut, identifier="width", edge_id="-", verbose=verbose, scaling_factor=scaling_factor)
+        br_p_df = br_edge(d_df_cut, edge_id="+", scaling_factor=scaling_factor)
+        br_n_df = br_edge(d_df_cut, edge_id="-", scaling_factor=scaling_factor)
 
-    p_dfs = [p_df_cut, mass_p_df, mass_n_df, decay_p_df, decay_n_df, p_df_cut, p_df_cut]
-    d_dfs = [d_df_cut, d_df_cut, d_df_cut, d_df_cut, d_df_cut, br_p_df, br_n_df]
+        p_dfs.extend([mass_p_df, mass_n_df, decay_p_df, decay_n_df, p_df_cut, p_df_cut, mass_p_df, mass_n_df])
+        d_dfs.extend([d_df_cut, d_df_cut, d_df_cut, d_df_cut, br_p_df, br_n_df, br_p_df, br_n_df])
 
     no_lists = len(p_dfs)
 
@@ -480,7 +484,7 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
 
     mass_edges_n, mass_edges_p = mass_edges(p_df, d_df)
 
-    initial_point = set_initial_feasible_point(masses, mass_edges_n, mass_edges_p, where="pos_edge", verbose=verbose)
+    initial_point = set_initial_feasible_point(masses, mass_edges_n, mass_edges_p, where="org", verbose=verbose)
 
     sampled_masses = hit_and_run_uniform(csr_constraints, 1e-09, lower_bounds, upper_bounds, initial_point, stable_particles_ids, scale, n_samples=n_samples, burn=1000, thin=2000, scale_coordinates=True, verbose=verbose)
 
