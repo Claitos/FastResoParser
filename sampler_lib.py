@@ -224,8 +224,8 @@ def edge_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0, verbose: bo
         br_p_df = br_edge(d_df_cut, edge_id="+", scaling_factor=scaling_factor)
         br_n_df = br_edge(d_df_cut, edge_id="-", scaling_factor=scaling_factor)
 
-        p_dfs.extend([mass_p_df, mass_n_df, decay_p_df, decay_n_df, p_df_cut, p_df_cut, mass_p_df, mass_n_df])
-        d_dfs.extend([d_df_cut, d_df_cut, d_df_cut, d_df_cut, br_p_df, br_n_df, br_p_df, br_n_df])
+        p_dfs.extend([mass_p_df, mass_n_df, decay_p_df, decay_n_df, p_df_cut, p_df_cut])
+        d_dfs.extend([d_df_cut, d_df_cut, d_df_cut, d_df_cut, br_p_df, br_n_df])
 
     no_lists = len(p_dfs)
 
