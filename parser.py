@@ -361,14 +361,14 @@ def importance_score(particle_id: int, particles_df: pd.DataFrame, decays_df: pd
 
 
 
-def normalize_scores(scores: list) -> list:
+def normalize_scores(scores: list, pion_index: int = 735) -> list:
     """
     Normalizes the importance scores to sum to 1, with pions fixed at 1. Thus their total sum is equal to 2.
 
     :param scores (list): The list of importance scores to normalize.
     :return norm_scores (list): The normalized importance scores.
     """
-    pion_no = 735   # 735 for PDG2016Plus,  1514 for QM2016Plus
+    pion_no = pion_index   # 735 for PDG2016Plus,  1514 for QM2016Plus
     scores[pion_no] = 0.0  # Set the importance score for pions to 0.0
     list_np = np.array(scores)
     sum = np.sum(list_np)
