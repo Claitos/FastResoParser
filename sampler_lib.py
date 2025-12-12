@@ -32,6 +32,9 @@ def mass_conservation(p_df: pd.DataFrame, d_df: pd.DataFrame, edge_id: str = "+"
         pd.DataFrame: DataFrame with updated parent masses.
     """
 
+    stable_particles_test = p_df[p_df["Width (GeV)"] == 0.0]
+    stable_particles = stable_particles_test[stable_particles_test["No. of decay channels"] == 1]["ID"].tolist()
+
     counter_corr = 0
     counter_negative = 0
 
@@ -60,7 +63,7 @@ def mass_conservation(p_df: pd.DataFrame, d_df: pd.DataFrame, edge_id: str = "+"
 
         total_decay_mass = np.sum(decay_product_masses)
 
-        if total_decay_mass > parent_mass:
+        if total_decay_mass >= parent_mass and parent_id not in stable_particles:  # Exclude stable particles
             if verbose:
                 print(f"Mass conservation violated for Parent ID {parent_id}: Parent Mass = {parent_mass}, Sum of Decay Products Mass = {total_decay_mass}. Correcting masses.")
 
@@ -79,6 +82,7 @@ def mass_conservation(p_df: pd.DataFrame, d_df: pd.DataFrame, edge_id: str = "+"
                         counter_negative += 1
 
                 if indices_negative is not None and len(indices_negative) > 0:
+                    print(f"Adjusting scaling for Parent ID {parent_id} due to negative mass errors in decay products at indices {indices_negative}.")
                     for i , decay_product_mass_err in enumerate(decay_product_masses_err_scaled):
                         if i not in indices_negative:
                             scale_factor = (parent_mass - np.sum(np.array(decay_product_masses)[indices_negative])) / np.sum(np.array(decay_product_masses)[[j for j in range(len(decay_product_masses)) if j not in indices_negative]])
@@ -135,12 +139,11 @@ def get_edges(p_df: pd.DataFrame, d_df: pd.DataFrame, identifier: str = "mass", 
     bool_series = p_df["ID"].isin(stable_particles)
 
     if identifier == "mass":
-        err_p = p_df["Mass Error Pos (GeV)"] * scaling_factor
-        err_n = p_df["Mass Error Neg (GeV)"] * scaling_factor
+        err_p = p_df["Mass Error Pos (GeV)"].copy() * scaling_factor
+        err_n = p_df["Mass Error Neg (GeV)"].copy() * scaling_factor
     elif identifier == "width":
-        err_p = p_df["Width Error Pos (GeV)"] * scaling_factor
-        err_n = p_df["Width Error Neg (GeV)"] * scaling_factor
-
+        err_p = p_df["Width Error Pos (GeV)"].copy() * scaling_factor
+        err_n = p_df["Width Error Neg (GeV)"].copy() * scaling_factor
     p_df_edges = p_df.copy()   # create a copy to avoid modifying the original DataFrame
 
     if identifier == "mass":
@@ -205,11 +208,11 @@ def edge_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0, verbose: bo
     """
 
     if cut == 0:
-        dir_name = "Datafiles_sampled/edge_studys/edge_study_nsigma_0"
+        dir_name = "Datafiles_sampled/edge_studys/edge_study_nsigma3_0"
         p_df_cut = p_df
         d_df_cut = d_df
     else:
-        dir_name = f"Datafiles_sampled/edge_studys/edge_study_nsigma_{cut:.0e}"
+        dir_name = f"Datafiles_sampled/edge_studys/edge_study_nsigma3_{cut:.0e}"
         p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, verbose=True)
 
     p_dfs = [p_df_cut]
