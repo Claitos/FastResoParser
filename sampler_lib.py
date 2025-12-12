@@ -208,11 +208,11 @@ def edge_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0, verbose: bo
     """
 
     if cut == 0:
-        dir_name = "Datafiles_sampled/edge_studys/edge_study_nsigma3_0"
+        dir_name = "Datafiles_sampled/edge_studys/edge_study_nsigma_QM_0"
         p_df_cut = p_df
         d_df_cut = d_df
     else:
-        dir_name = f"Datafiles_sampled/edge_studys/edge_study_nsigma3_{cut:.0e}"
+        dir_name = f"Datafiles_sampled/edge_studys/edge_study_nsigma_QM_{cut:.0e}"
         p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, verbose=True)
 
     p_dfs = [p_df_cut]
