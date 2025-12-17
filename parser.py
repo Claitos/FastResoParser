@@ -361,19 +361,30 @@ def importance_score(particle_id: int, particles_df: pd.DataFrame, decays_df: pd
 
 
 
-def normalize_scores(scores: list, pion_index: int = 735) -> list:
+def normalize_scores(scores: list, pion_index: int = 735, f0: bool = False) -> list:
     """
     Normalizes the importance scores to sum to 1, with pions fixed at 1. Thus their total sum is equal to 2.
 
     :param scores (list): The list of importance scores to normalize.
+    :param pion_index (int): The index of the pion in the scores list.
+    :param f0 (bool): Whether the f0 particle is included in the scores list.
     :return norm_scores (list): The normalized importance scores.
     """
-    pion_no = pion_index   # 735 for PDG2016Plus,  1514 for QM2016Plus
+    if f0 == False:
+        pion_no = pion_index   # 735 for PDG2016Plus,  1514 for QM2016Plus
+    else:
+        pion_no = pion_index+1  # since f0 is added before pion in the list
+
     scores[pion_no] = 0.0  # Set the importance score for pions to 0.0
+    f0_index = 731 # f0 index in PDG2016Plus
+    if f0 == True:
+        scores[f0_index] = 0.0  # Set the importance score for f0 to 0.0
     list_np = np.array(scores)
     sum = np.sum(list_np)
     norm_list = (list_np / sum).tolist()
     norm_list[pion_no] = 1.0  # Ensure pions remain at 1.0
+    if f0 == True:
+        norm_list[f0_index] = 1.0  # Ensure f0 remains at 1.0
     return norm_list
 
 
@@ -445,7 +456,7 @@ def cutting_routine(cuts: list[float] = [1e-02], dir_name: str = "cuts_test", cu
 
 
 
-def cutting_dataframes(particles_df: pd.DataFrame, decays_df: pd.DataFrame, cut: float = 1e-02, verbose: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
+def cutting_dataframes(particles_df: pd.DataFrame, decays_df: pd.DataFrame, cut: float = 1e-02, f0: bool = False, verbose: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Applies a cut to filter particles based on their importance score.
     It keeps particles with an importance score above the specified cut value.
@@ -454,6 +465,7 @@ def cutting_dataframes(particles_df: pd.DataFrame, decays_df: pd.DataFrame, cut:
     :param particles_df: The DataFrame containing particle information.
     :param decays_df: The DataFrame containing decay channel information.
     :param cut: The threshold for the importance score to keep a particle.
+    :param f0: If True, includes the f0 particle in the importance score calculation. Default is False.
     :param verbose: If True, prints additional information. Default is False.
     :return: A tuple containing the filtered particles and decays DataFrames.
     """
@@ -467,7 +479,7 @@ def cutting_dataframes(particles_df: pd.DataFrame, decays_df: pd.DataFrame, cut:
         importance = importance_score(id, particles_df, decays_df)
         importance_scores.append(importance)
 
-    norm_importance_scores = normalize_scores(importance_scores)
+    norm_importance_scores = normalize_scores(importance_scores, pion_index=735, f0=f0) # 735 for PDG2016Plus,  1514 for QM2016Plus
     particles_df["Importance Score"] = norm_importance_scores
 
 
