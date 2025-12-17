@@ -258,7 +258,7 @@ def edge_study(p_df: pd.DataFrame, d_df: pd.DataFrame, cut: int = 0, verbose: bo
 
 
 
-def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: str = "mass", cut: int = 0,  verbose: bool = False) -> None:
+def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: str = "mass", cut: int = 0, f0_bool: bool = False, verbose: bool = False) -> None:
     """
     Perform a sampling study by generating data files with mass and branching ratio values sampled. Optionally apply a importance score cut to the particles in the dataframes.
     Parameters:
@@ -267,6 +267,7 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
         dir_name (str): Directory name to save the sampled data files.
         case (str): Type of sampling to perform, either "mass", "br", or "both".
         cut (int): If non-zero, apply a cut to the dataframes before processing.
+        f0_bool (bool): If True, include f0(500) in the sampling.
         verbose (bool): If True, print detailed information during processing.
     """
 
@@ -279,10 +280,10 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
         d_df_cut = d_df
     else:
         dir_name = f"{dir_name}_{cut:.0e}"
-        p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, f0=True, verbose=verbose)
+        p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, f0=f0_bool, verbose=verbose)
 
 
-    n_sigma = 1
+    n_sigma = 3
     n_samples = 1001    # includes the last list with mean masses -> 1000 samples + 1 mean mass list
     p_dfs = [p_df_cut]
     d_dfs = [d_df_cut]
@@ -925,7 +926,7 @@ def plot_sample_2(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, dir
     #plt.title('2D Histogram of Particle Species vs Value')
 
     plt.tight_layout()
-    plt.savefig(f"{dir_name}/sampled_mass_particles_edges.png")
+    plt.savefig(f"{dir_name}/sampled_mass_particles_edges_3sigma.png")
     plt.close()
 
 
