@@ -279,9 +279,10 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
         d_df_cut = d_df
     else:
         dir_name = f"{dir_name}_{cut:.0e}"
-        p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, verbose=verbose)
+        p_df_cut, d_df_cut = parser.cutting_dataframes(p_df, d_df, cut=cut, f0=True, verbose=verbose)
 
 
+    n_sigma = 1
     n_samples = 1001    # includes the last list with mean masses -> 1000 samples + 1 mean mass list
     p_dfs = [p_df_cut]
     d_dfs = [d_df_cut]
@@ -294,13 +295,13 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
                 print(f"Sampling iteration {_+1}")
 
             sampled_p_df = p_df_cut.copy()  
-            sampled_d_df = sample_branching_ratios(d_df_cut, rej_sampling=True, verbose=False)
+            sampled_d_df = sample_branching_ratios(d_df_cut, nsigma=n_sigma, rej_sampling=True, verbose=False)
 
             p_dfs.append(sampled_p_df)
             d_dfs.append(sampled_d_df)
 
     elif case.lower() == "mass":
-        sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples-1, verbose=verbose)
+        sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples-1, nsigma=n_sigma, verbose=verbose)
 
         for i in range(n_samples):
 
@@ -311,7 +312,7 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
             d_dfs.append(sampled_d_df)
 
     elif case.lower() == "both":
-        sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples-1, verbose=verbose)
+        sampled_df_list = sample_masses(p_df_cut, d_df_cut, n_samples=n_samples-1, nsigma=n_sigma, verbose=verbose)
 
         for i in range(n_samples):
             if verbose:
@@ -320,7 +321,7 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
                 print(f"Sampling iteration {i+1}")
 
             sampled_p_df = sampled_df_list[i]
-            sampled_d_df = sample_branching_ratios(d_df_cut, rej_sampling=True, verbose=False)
+            sampled_d_df = sample_branching_ratios(d_df_cut, nsigma=n_sigma, rej_sampling=True, verbose=False)
 
             p_dfs.append(sampled_p_df)
             d_dfs.append(sampled_d_df)
@@ -339,7 +340,7 @@ def sampling_study(p_df: pd.DataFrame, d_df: pd.DataFrame, dir_name: str, case: 
 
 
 
-def sample_branching_ratios(d_df: pd.DataFrame, rej_sampling: bool = True, verbose: bool = False) -> pd.DataFrame:
+def sample_branching_ratios(d_df: pd.DataFrame, nsigma: float = 1, rej_sampling: bool = True, verbose: bool = False) -> pd.DataFrame:
     """
     Generate a decay DataFrame with branching ratios sampled according to their uncertainties.
     Optionally implements rejection sampling to ensure physical validity. (Sum of BRs for each parent must be equal to 1). If this fails after a set number of attempts, the original BRs are kept.
@@ -347,6 +348,7 @@ def sample_branching_ratios(d_df: pd.DataFrame, rej_sampling: bool = True, verbo
 
     Parameters:
         d_df (pd.DataFrame): DataFrame containing the decay data.
+        nsigma (float): Number of standard deviations to sample within.
         rej_sampling (bool): If True, use rejection sampling to ensure sum of BRs equals 1.
         verbose (bool): If True, print additional information.
 
@@ -362,10 +364,10 @@ def sample_branching_ratios(d_df: pd.DataFrame, rej_sampling: bool = True, verbo
 
         decay_channels = sampled_dfs[sampled_dfs["ParentID"] == id]
         brs = decay_channels["BranchingRatio"].values
-        br_err_p = decay_channels["BR Error Pos"].values
-        br_err_n = decay_channels["BR Error Neg"].values
-        br_err_p_corrected = np.minimum(br_err_p, 1.0 - brs)
-        br_err_n_corrected = np.minimum(br_err_n, brs)
+        br_err_p = decay_channels["BR Error Pos"].values * nsigma
+        br_err_n = decay_channels["BR Error Neg"].values * nsigma
+        br_err_p_corrected = np.minimum(br_err_p, 1.0 - brs) # ensure BR + err does not exceed 1
+        br_err_n_corrected = np.minimum(br_err_n, brs) # ensure BR - err does not go below 0
         no_modes = len(brs)
 
         if verbose:
@@ -442,7 +444,7 @@ def sample_branching_ratios(d_df: pd.DataFrame, rej_sampling: bool = True, verbo
 
 
 
-def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbose: bool = False) -> list[pd.DataFrame]:
+def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, nsigma: float = 1, verbose: bool = False) -> list[pd.DataFrame]:
     """
     Generate a particle DataFrame with masses sampled according to their uncertainties fulfilling all the linear constraints that are given by "mass conservation".
     To sample the masses a hit and run MCMC algorithm is used.
@@ -451,6 +453,7 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
         p_df (pd.DataFrame): DataFrame containing the particle and mass data.
         d_df (pd.DataFrame): DataFrame containing the decay data.
         n_samples (int): Number of samples to generate.
+        nsigma (float): Number of standard deviations to sample within.
         verbose (bool): If True, print additional information.
 
     Returns:
@@ -467,11 +470,11 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
         print(f"Stable particles (no sampling applied): {stable_particles}\nwith indices {stable_particles_ids}\n")
 
     masses = p_df["Mass (GeV)"].values
-    mass_err_p = p_df["Mass Error Pos (GeV)"].values
-    mass_err_n = p_df["Mass Error Neg (GeV)"].values
+    mass_err_p = p_df["Mass Error Pos (GeV)"].values 
+    mass_err_n = p_df["Mass Error Neg (GeV)"].values 
 
-    lower_bounds = masses - mass_err_n
-    upper_bounds = masses + mass_err_p
+    lower_bounds = np.maximum(masses - mass_err_n * nsigma, 0) # lower bounds for each mass  (no negative masses)
+    upper_bounds = masses + mass_err_p * nsigma # upper bounds for each mass
 
     scale = upper_bounds - lower_bounds # scale for each mass bounds to sample direction vector later
     scale = np.clip(scale, a_min=1e-12, a_max=None)  # avoid zero scale for stable particles
@@ -500,8 +503,8 @@ def sample_masses(p_df: pd.DataFrame, d_df: pd.DataFrame, n_samples: int, verbos
         if np.any(sampled_masses - upper_bounds > 0):
             print("Error: Some sampled masses are above the upper bounds!")
 
-        plot_sample(sampled_masses, scale, lower_bounds, p_df=p_df, dir_name="Plots/Debug_sampling2")
-        plot_sample_2(sampled_masses, scale, lower_bounds, dir_name="Plots/Debug_sampling2", edges=(mass_edges_n, mass_edges_p))
+        #plot_sample(sampled_masses, scale, lower_bounds, p_df=p_df, dir_name="Plots/Debug_sampling3")
+        plot_sample_2(sampled_masses, scale, lower_bounds, dir_name="Plots/Debug_sampling3", edges=(mass_edges_n, mass_edges_p))
 
     sampled_df_list = []
 
@@ -902,25 +905,27 @@ def plot_sample_2(samples: np.ndarray, scale: np.ndarray, lower: np.ndarray, dir
         norm=LogNorm()
     )
 
-    plt.plot(means, color='red', linestyle='--', label='Mean Value', linewidth=1)
-    plt.plot(mass_p_scaled, color='purple', linestyle='-', label='Mass Edge +', linewidth=2)
-    plt.plot(mass_n_scaled, color='orange', linestyle='-', label='Mass Edge -', linewidth=2)
+    x_means = np.arange(n_particles) + 0.5
+    plt.plot(x_means, means, color='red', linestyle='None', marker='.', label='Mean Value')
+    #plt.plot(mass_p_scaled, color='purple', linestyle='-', label='Mass Edge +', linewidth=2)
+    #plt.plot(mass_n_scaled, color='orange', linestyle='-', label='Mass Edge -', linewidth=2)
     plt.legend()
 
     mean_of_means = np.mean(means)
-    plt.text(n_particles * 0.8, 0.9, f'Overall Mean: {mean_of_means:.3f}', color='black', fontsize=12, bbox=dict(facecolor='white', alpha=0.5))
+    #plt.text(n_particles * 0.05, 0.8, f'Overall Mean: {mean_of_means:.3f}', color='black', fontsize=12, bbox=dict(facecolor='white', alpha=0.8))
+    plt.text(n_particles * 0.05, 0.9, f'1000 sampled masses \nOverall Mean: {mean_of_means:.3f}', color='black', fontsize=12, bbox=dict(facecolor='white', alpha=0.8))
 
     # Add color bar for frequency
-    cbar = plt.colorbar(im)
+    cbar = plt.colorbar(im, pad=0.01)
     cbar.set_label('Frequency')
 
     # Labels and title
-    plt.xlabel('Particle species')
-    plt.ylabel('Mass transformed to [0, 1]')
-    plt.title('2D Histogram of Particle Species vs Value')
+    plt.xlabel(r'particle index in $\it{s}$PDG2016+ list')
+    plt.ylabel(r'sampled masses $y_i \in [0, 1]$')
+    #plt.title('2D Histogram of Particle Species vs Value')
 
     plt.tight_layout()
-    plt.savefig(f"{dir_name}/sampled_mass_particles_edges4.png")
+    plt.savefig(f"{dir_name}/sampled_mass_particles_edges.png")
     plt.close()
 
 
